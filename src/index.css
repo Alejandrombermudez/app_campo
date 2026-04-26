@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+:root {
+  --primary: #0d7377;
+  --primary-dark: #0a5c5f;
+  --primary-light: #14a8ad;
+  --primary-50: #f0fafa;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  background: var(--primary-50);
+  color: #1a1a2e;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100svh;
+}
+
+/* Scrollbar sutil */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #0d737740; border-radius: 2px; }
+
+/* Input base */
+input[type="text"],
+input[type="number"],
+input[type="date"],
+input[type="tel"],
+select,
+textarea {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+  font-family: inherit;
+  background: white;
+  outline: none;
+  transition: border-color 0.15s;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px #0d737720;
+}
