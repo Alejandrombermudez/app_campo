@@ -30,16 +30,6 @@ export function Step07({ data, onChange, evaluador1, evaluador2 }: Props) {
         onChange={v => set('firma_evaluador2_dataurl', v)}
       />
 
-      <SignatureCanvas
-        label="Propietario / Representante del predio"
-        value={data.firma_propietario_dataurl ?? null}
-        onChange={v => set('firma_propietario_dataurl', v)}
-      />
-
-      <div className="bg-[#0d7377]/5 border border-[#0d7377]/20 rounded-xl p-4 text-sm text-gray-600">
-        <p>Al firmar, el propietario confirma que la información registrada es veraz y que autoriza
-        el inicio de las actividades de restauración en las zonas evaluadas.</p>
-      </div>
     </div>
   )
 }
