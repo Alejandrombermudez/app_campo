@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { useOnlineStatus } from '../lib/useOnlineStatus'
 import type { EvaluacionRecord } from '../types/evaluacion'
 import type { EncuestaPredialRecord } from '../types/encuesta'
+import type { PredioRecord } from '../types/predio'
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────────
 interface MuniStat { municipio: string; evaluaciones: number; encuestas: number }
@@ -63,14 +64,22 @@ export function StatsTab() {
     setLoading(true)
     try {
       // ── Datos locales ─────────────────────────────────────────────────────
-      const evals = await db.evaluaciones.toArray() as EvaluacionRecord[]
-      const encs  = await db.encuestas.toArray()    as EncuestaPredialRecord[]
+      const predios = await db.predios.toArray()     as PredioRecord[]
+      const evals   = await db.evaluaciones.toArray() as EvaluacionRecord[]
+      const encs    = await db.encuestas.toArray()    as EncuestaPredialRecord[]
 
-      const pendingEval = evals.filter(e => e.sync_status !== 'synced').length
+      const pendingEval = predios.filter(e => e.sync_status !== 'synced').length
+                        + evals.filter(e => e.sync_status !== 'synced').length
       const pendingEnc  = encs.filter(e => e.sync_status !== 'synced').length
 
-      // Municipios
+      // Municipios — predios cuentan en ambas columnas (campo + predial)
       const muniMap = new Map<string, MuniStat>()
+      for (const p of predios) {
+        const m = p.municipio || 'Sin municipio'
+        if (!muniMap.has(m)) muniMap.set(m, { municipio: m, evaluaciones: 0, encuestas: 0 })
+        muniMap.get(m)!.evaluaciones++
+        muniMap.get(m)!.encuestas++
+      }
       for (const e of evals) {
         const m = (e.seccion_1 as { municipio?: string })?.municipio || e.municipio || 'Sin municipio'
         if (!muniMap.has(m)) muniMap.set(m, { municipio: m, evaluaciones: 0, encuestas: 0 })
@@ -86,6 +95,10 @@ export function StatsTab() {
 
       // Evaluadores
       const evalMap = new Map<string, number>()
+      for (const p of predios) {
+        const k = p.created_by || '(sin nombre)'
+        evalMap.set(k, (evalMap.get(k) ?? 0) + 1)
+      }
       for (const e of evals) {
         const k = e.created_by || '(sin nombre)'
         evalMap.set(k, (evalMap.get(k) ?? 0) + 1)
@@ -100,6 +113,11 @@ export function StatsTab() {
 
       // Actividad reciente
       const allItems: RecentItem[] = [
+        ...predios.map(p => ({
+          tipo: 'eval' as const,
+          nombre: p.nombre_predio || p.nombre_propietario || '(Sin nombre)',
+          fecha: p.updated_at,
+        })),
         ...evals.map(e => ({
           tipo: 'eval' as const,
           nombre: e.nombre_predio || '(Sin nombre)',
@@ -115,14 +133,16 @@ export function StatsTab() {
         .sort((a, b) => b.fecha.localeCompare(a.fecha))
         .slice(0, 5)
 
-      // Ganadería
-      const encsConGan = encs.filter(e => (e.sec_ganaderia as { tiene_ganaderia?: boolean })?.tiene_ganaderia)
-      const encsConRegen = encs.filter(e => {
-        const g = e.sec_ganaderia as { interes_ganaderia_regenerativa?: boolean }
-        return g?.interes_ganaderia_regenerativa
-      })
-      const pctGanaderia    = encs.length > 0 ? Math.round((encsConGan.length / encs.length) * 100) : null
-      const pctRegenerativa = encsConGan.length > 0 ? Math.round((encsConRegen.length / encsConGan.length) * 100) : null
+      // Ganadería — predios + encuestas legacy
+      const allWithGan = [
+        ...predios.map(p => p.sec_ganaderia),
+        ...encs.map(e => e.sec_ganaderia),
+      ]
+      const conGan   = allWithGan.filter(g => (g as { tiene_ganaderia?: boolean })?.tiene_ganaderia)
+      const conRegen = conGan.filter(g => (g as { interes_ganaderia_regenerativa?: boolean })?.interes_ganaderia_regenerativa)
+      const totalGanBase  = predios.length + encs.length
+      const pctGanaderia    = totalGanBase > 0 ? Math.round((conGan.length / totalGanBase) * 100) : null
+      const pctRegenerativa = conGan.length   > 0 ? Math.round((conRegen.length / conGan.length) * 100) : null
 
       // ── Datos remotos (si hay internet) ──────────────────────────────────
       let totalEvalRemote: number | null = null
@@ -138,8 +158,8 @@ export function StatsTab() {
       }
 
       setData({
-        totalEvalLocal:  evals.length,
-        totalEncLocal:   encs.length,
+        totalEvalLocal:  predios.length + evals.length,
+        totalEncLocal:   predios.length + encs.length,
         pendingEval,
         pendingEnc,
         byMuni,

@@ -1,11 +1,13 @@
 import Dexie, { type EntityTable } from 'dexie'
 import type { EvaluacionRecord, PhotoRecord } from '../types/evaluacion'
 import type { EncuestaPredialRecord } from '../types/encuesta'
+import type { PredioRecord } from '../types/predio'
 
 class AppDB extends Dexie {
   evaluaciones!: EntityTable<EvaluacionRecord, 'id'>
   photos!:       EntityTable<PhotoRecord, 'id'>
   encuestas!:    EntityTable<EncuestaPredialRecord, 'id'>
+  predios!:      EntityTable<PredioRecord, 'id'>
 
   constructor() {
     super('AECampoDB')
@@ -17,6 +19,12 @@ class AppDB extends Dexie {
       evaluaciones: '++id, local_id, sync_status, fecha_visita, updated_at',
       photos:       '++id, local_evaluacion_id, field_key, sync_status',
       encuestas:    '++id, local_id, sync_status, fecha_encuesta, municipio, updated_at',
+    })
+    this.version(3).stores({
+      evaluaciones: '++id, local_id, sync_status, fecha_visita, updated_at',
+      photos:       '++id, local_evaluacion_id, field_key, sync_status',
+      encuestas:    '++id, local_id, sync_status, fecha_encuesta, municipio, updated_at',
+      predios:      '++id, local_id, sync_status, fecha, municipio, updated_at',
     })
   }
 }

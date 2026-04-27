@@ -3,8 +3,9 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Home } from './pages/Home'
 import { EvaluacionPage } from './pages/Evaluacion'
 import { EncuestaPage } from './pages/Encuesta'
+import { PredioPage } from './pages/Predio'
 import { useOnlineStatus } from './lib/useOnlineStatus'
-import { syncPendingEvaluaciones, syncPendingEncuestas } from './lib/sync'
+import { syncPendingEvaluaciones, syncPendingEncuestas, syncPendingPredios } from './lib/sync'
 
 function SyncTrigger() {
   const online  = useOnlineStatus()
@@ -15,6 +16,7 @@ function SyncTrigger() {
       const timer = setTimeout(() => {
         syncPendingEvaluaciones()
         syncPendingEncuestas()
+        syncPendingPredios()
       }, 2000)
       return () => clearTimeout(timer)
     }
@@ -29,11 +31,15 @@ export default function App() {
     <BrowserRouter>
       <SyncTrigger />
       <Routes>
-        <Route path="/"                  element={<Home />} />
-        <Route path="/evaluacion/nueva"  element={<EvaluacionPage />} />
-        <Route path="/evaluacion/:id"    element={<EvaluacionPage />} />
-        <Route path="/encuesta/nueva"    element={<EncuestaPage />} />
-        <Route path="/encuesta/:id"      element={<EncuestaPage />} />
+        <Route path="/"                 element={<Home />} />
+        {/* Formulario unificado (nuevo) */}
+        <Route path="/predio/nueva"     element={<PredioPage />} />
+        <Route path="/predio/:id"       element={<PredioPage />} />
+        {/* Legacy — acceso a registros anteriores */}
+        <Route path="/evaluacion/nueva" element={<EvaluacionPage />} />
+        <Route path="/evaluacion/:id"   element={<EvaluacionPage />} />
+        <Route path="/encuesta/nueva"   element={<EncuestaPage />} />
+        <Route path="/encuesta/:id"     element={<EncuestaPage />} />
       </Routes>
     </BrowserRouter>
   )
