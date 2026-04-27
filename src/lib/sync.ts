@@ -2,6 +2,10 @@ import { db } from '../db/schema'
 import { supabase, evalTable } from './supabase'
 import type { PhotoRecord } from '../types/evaluacion'
 
+function encTable() {
+  return supabase.schema('siembra').from('familias')
+}
+
 // ─── Subir una foto al bucket campo-fotos ────────────────────────────────────
 async function uploadPhoto(photo: PhotoRecord, localId: string): Promise<string | null> {
   const ext = photo.mime_type.includes('png') ? 'png' : 'jpg'
@@ -141,6 +145,69 @@ export async function syncPendingEvaluaciones(): Promise<{ synced: number; error
         : (typeof err === 'object' ? JSON.stringify(err) : String(err))
       console.error('[sync] error:', msg)
       await db.evaluaciones.update(ev.id!, { sync_status: 'error', sync_error: msg })
+      errors++
+    }
+  }
+
+  return { synced, errors }
+}
+
+// ─── Sincronizar encuestas prediales pendientes → siembra.familias ────────────
+export async function syncPendingEncuestas(): Promise<{ synced: number; errors: number }> {
+  if (!navigator.onLine) return { synced: 0, errors: 0 }
+
+  const pending = await db.encuestas
+    .where('sync_status').anyOf(['pending', 'error'])
+    .toArray()
+
+  let synced = 0, errors = 0
+
+  for (const enc of pending) {
+    try {
+      const payload = {
+        local_id:           enc.local_id,
+        sync_origin:        'pwa',
+        nombre_propietario: enc.nombre_propietario || null,
+        municipio:          enc.municipio          || null,
+        vereda:             enc.vereda             || null,
+        fecha_encuesta:     enc.fecha_encuesta     || null,
+        created_by:         enc.created_by         || null,
+        step_completed:     enc.step_completed,
+        sec_general:        enc.sec_general,
+        sec_vivienda:       enc.sec_vivienda,
+        sec_familia:        enc.sec_familia,
+        sec_economia:       enc.sec_economia,
+        sec_cultivos:       enc.sec_cultivos,
+        sec_ganaderia:      enc.sec_ganaderia,
+        sec_tecnologia:     enc.sec_tecnologia,
+        sec_bosque:         enc.sec_bosque,
+        updated_at:         new Date().toISOString(),
+      }
+
+      const { data, error } = await encTable()
+        .upsert(payload, { onConflict: 'local_id' })
+        .select('id')
+        .single()
+
+      if (error) {
+        const supMsg = [error.message, error.details, error.hint, error.code]
+          .filter(Boolean).join(' | ')
+        throw new Error(supMsg || JSON.stringify(error))
+      }
+
+      await db.encuestas.update(enc.id!, {
+        sync_status: 'synced',
+        sync_error:  null,
+        supabase_id: data?.id ?? null,
+        updated_at:  new Date().toISOString(),
+      })
+      synced++
+    } catch (err: unknown) {
+      const msg = err instanceof Error
+        ? err.message
+        : (typeof err === 'object' ? JSON.stringify(err) : String(err))
+      console.error('[sync encuesta] error:', msg)
+      await db.encuestas.update(enc.id!, { sync_status: 'error', sync_error: msg })
       errors++
     }
   }

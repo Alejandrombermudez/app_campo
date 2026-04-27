@@ -2,8 +2,9 @@ import { useEffect, useRef } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Home } from './pages/Home'
 import { EvaluacionPage } from './pages/Evaluacion'
+import { EncuestaPage } from './pages/Encuesta'
 import { useOnlineStatus } from './lib/useOnlineStatus'
-import { syncPendingEvaluaciones } from './lib/sync'
+import { syncPendingEvaluaciones, syncPendingEncuestas } from './lib/sync'
 
 function SyncTrigger() {
   const online  = useOnlineStatus()
@@ -11,7 +12,10 @@ function SyncTrigger() {
 
   useEffect(() => {
     if (online && !prevRef.current) {
-      const timer = setTimeout(() => { syncPendingEvaluaciones() }, 2000)
+      const timer = setTimeout(() => {
+        syncPendingEvaluaciones()
+        syncPendingEncuestas()
+      }, 2000)
       return () => clearTimeout(timer)
     }
     prevRef.current = online
@@ -25,9 +29,11 @@ export default function App() {
     <BrowserRouter>
       <SyncTrigger />
       <Routes>
-        <Route path="/"                 element={<Home />} />
-        <Route path="/evaluacion/nueva" element={<EvaluacionPage />} />
-        <Route path="/evaluacion/:id"   element={<EvaluacionPage />} />
+        <Route path="/"                  element={<Home />} />
+        <Route path="/evaluacion/nueva"  element={<EvaluacionPage />} />
+        <Route path="/evaluacion/:id"    element={<EvaluacionPage />} />
+        <Route path="/encuesta/nueva"    element={<EncuestaPage />} />
+        <Route path="/encuesta/:id"      element={<EncuestaPage />} />
       </Routes>
     </BrowserRouter>
   )
