@@ -1,10 +1,69 @@
 import { db } from '../db/schema'
 import { supabase, evalTable } from './supabase'
-import type { PhotoRecord } from '../types/evaluacion'
+import type { PhotoRecord, ZonaData, EvaluacionRecord } from '../types/evaluacion'
+import type { CultivoRow, EncuestaPredialRecord } from '../types/encuesta'
 
 function encTable()     { return supabase.schema('siembra').from('familias') }
 function predioTable()  { return supabase.schema('siembra').from('evaluaciones_campo') }
 function familiaTable() { return supabase.schema('siembra').from('predios') }
+
+// ─── Helpers de merge colaborativo ────────────────────────────────────────────
+
+/** Local wins: toma remote como base, aplica local solo para campos no vacíos */
+function mergeJsonb(
+  remote: Record<string, unknown>,
+  local:  Record<string, unknown>,
+): Record<string, unknown> {
+  const result = { ...remote }
+  for (const [k, v] of Object.entries(local)) {
+    const isEmpty = v === null || v === undefined || v === ''
+      || (Array.isArray(v) && v.length === 0)
+    if (!isEmpty) result[k] = v
+  }
+  return result
+}
+
+/** Mergea zonas por zona_numero */
+function mergeZonas(remote: ZonaData[], local: ZonaData[]): ZonaData[] {
+  const result = remote.map(rz => {
+    const lz = local.find(z => z.zona_numero === rz.zona_numero)
+    if (!lz) return rz
+    return {
+      ...rz,
+      cobertura: mergeJsonb(
+        (rz.cobertura ?? {}) as Record<string, unknown>,
+        (lz.cobertura ?? {}) as Record<string, unknown>,
+      ) as ZonaData['cobertura'],
+      suelo: mergeJsonb(
+        (rz.suelo     ?? {}) as Record<string, unknown>,
+        (lz.suelo     ?? {}) as Record<string, unknown>,
+      ) as ZonaData['suelo'],
+      logistica: mergeJsonb(
+        (rz.logistica ?? {}) as Record<string, unknown>,
+        (lz.logistica ?? {}) as Record<string, unknown>,
+      ) as ZonaData['logistica'],
+    }
+  })
+  // Zonas locales que no existen aún en remote
+  for (const lz of local) {
+    if (!result.find(z => z.zona_numero === lz.zona_numero)) result.push(lz)
+  }
+  return result
+}
+
+/** Mergea cultivos por nombre de cultivo */
+function mergeCultivos(remote: CultivoRow[], local: CultivoRow[]): CultivoRow[] {
+  const result = [...remote]
+  for (const lc of local) {
+    const idx = result.findIndex(r => r.cultivo === lc.cultivo)
+    const nonEmpty = Object.fromEntries(
+      Object.entries(lc).filter(([, v]) => v !== null && v !== undefined && v !== ''),
+    )
+    if (idx >= 0) result[idx] = { ...result[idx], ...nonEmpty }
+    else result.push(lc)
+  }
+  return result
+}
 
 // ─── Subir una foto al bucket campo-fotos ────────────────────────────────────
 async function uploadPhoto(photo: PhotoRecord, localId: string): Promise<string | null> {
@@ -147,7 +206,7 @@ export async function syncPendingEvaluaciones(): Promise<{ synced: number; error
       const firma_prop_url   = f7.firma_propietario_dataurl ? await uploadSignature(f7.firma_propietario_dataurl, ev.local_id, 'propietario') : null
 
       // 4. Sustituir IDs de fotos por URLs en las zonas
-      const zonas_data = ev.zonas.map(zona => {
+      let zonas_data = ev.zonas.map(zona => {
         const zn = zona.zona_numero
         const s  = { ...zona.suelo }  as Record<string, unknown>
         const l  = { ...zona.logistica } as Record<string, unknown>
@@ -161,6 +220,41 @@ export async function syncPendingEvaluaciones(): Promise<{ synced: number; error
         return { ...zona, suelo: s, logistica: l }
       })
 
+      // 4b. Merge colaborativo: si ya existe en Supabase, combinar secciones
+      // (el progreso local wins para campos no vacíos; remote conserva lo del otro colaborador)
+      let seccion_1 = ev.seccion_1 as Record<string, unknown>
+      let seccion_2 = ev.seccion_2 as Record<string, unknown>
+      let seccion_6 = ev.seccion_6 as Record<string, unknown>
+
+      if (ev.supabase_id) {
+        const { data: remote } = await evalTable()
+          .select('seccion_1_data, seccion_2_data, zonas_data, seccion_6_data')
+          .eq('id', ev.supabase_id)
+          .single()
+        if (remote) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const r = remote as any
+          seccion_1  = mergeJsonb(r.seccion_1_data ?? {}, seccion_1)
+          seccion_2  = mergeJsonb(r.seccion_2_data ?? {}, seccion_2)
+          zonas_data = mergeZonas(r.zonas_data     ?? [], zonas_data as ZonaData[]) as typeof zonas_data
+          seccion_6  = mergeJsonb(r.seccion_6_data ?? {}, seccion_6)
+          // Actualizar Dexie local con el merged result
+          await db.evaluaciones.update(ev.id!, {
+            seccion_1: seccion_1 as EvaluacionRecord['seccion_1'],
+            seccion_2: seccion_2 as EvaluacionRecord['seccion_2'],
+            zonas:     zonas_data as EvaluacionRecord['zonas'],
+            seccion_6: seccion_6 as EvaluacionRecord['seccion_6'],
+          })
+        }
+      }
+
+      // 4c. Obtener predio_id (FK a siembra.predios) si la evaluación tiene familia
+      let predio_id: string | null = null
+      if (ev.familia_local_id) {
+        const fam = await db.familias.filter(f => f.local_id === ev.familia_local_id).first()
+        predio_id = fam?.supabase_id ?? null
+      }
+
       // 5. Upsert en Supabase
       // Nota: municipio y codigo_predio no son columnas raíz de evaluaciones_campo;
       // ya viajan dentro de seccion_1_data (JSONB).
@@ -171,13 +265,14 @@ export async function syncPendingEvaluaciones(): Promise<{ synced: number; error
         num_zonas_eval: ev.num_zonas,
         step_completed: ev.step_completed,
         created_by:     ev.created_by || null,
-        seccion_1_data: ev.seccion_1,
-        seccion_2_data: ev.seccion_2,
+        seccion_1_data: seccion_1,
+        seccion_2_data: seccion_2,
         zonas_data,
-        seccion_6_data: ev.seccion_6,
+        seccion_6_data: seccion_6,
         firma_eval1_url,
         firma_eval2_url,
         firma_prop_url,
+        predio_id,
         sync_origin:    'pwa',
         updated_at:     new Date().toISOString(),
       }
@@ -222,6 +317,53 @@ export async function syncPendingEncuestas(): Promise<{ synced: number; errors: 
 
   for (const enc of pending) {
     try {
+      // Merge colaborativo: combinar secciones con el estado remoto si existe
+      let sec_general    = enc.sec_general    as Record<string, unknown>
+      let sec_vivienda   = enc.sec_vivienda   as Record<string, unknown>
+      let sec_familia    = enc.sec_familia    as Record<string, unknown>
+      let sec_economia   = enc.sec_economia   as Record<string, unknown>
+      let sec_cultivos   = enc.sec_cultivos
+      let sec_ganaderia  = enc.sec_ganaderia  as Record<string, unknown>
+      let sec_tecnologia = enc.sec_tecnologia as Record<string, unknown>
+      let sec_bosque     = enc.sec_bosque     as Record<string, unknown>
+
+      if (enc.supabase_id) {
+        const { data: remote } = await encTable()
+          .select('sec_general, sec_vivienda, sec_familia, sec_economia, sec_cultivos, sec_ganaderia, sec_tecnologia, sec_bosque')
+          .eq('id', enc.supabase_id)
+          .single()
+        if (remote) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const r = remote as any
+          sec_general    = mergeJsonb(r.sec_general    ?? {}, sec_general)
+          sec_vivienda   = mergeJsonb(r.sec_vivienda   ?? {}, sec_vivienda)
+          sec_familia    = mergeJsonb(r.sec_familia    ?? {}, sec_familia)
+          sec_economia   = mergeJsonb(r.sec_economia   ?? {}, sec_economia)
+          sec_cultivos   = mergeCultivos(r.sec_cultivos ?? [], sec_cultivos)
+          sec_ganaderia  = mergeJsonb(r.sec_ganaderia  ?? {}, sec_ganaderia)
+          sec_tecnologia = mergeJsonb(r.sec_tecnologia ?? {}, sec_tecnologia)
+          sec_bosque     = mergeJsonb(r.sec_bosque     ?? {}, sec_bosque)
+          // Actualizar Dexie local
+          await db.encuestas.update(enc.id!, {
+            sec_general:    sec_general    as EncuestaPredialRecord['sec_general'],
+            sec_vivienda:   sec_vivienda   as EncuestaPredialRecord['sec_vivienda'],
+            sec_familia:    sec_familia    as EncuestaPredialRecord['sec_familia'],
+            sec_economia:   sec_economia   as EncuestaPredialRecord['sec_economia'],
+            sec_cultivos,
+            sec_ganaderia:  sec_ganaderia  as EncuestaPredialRecord['sec_ganaderia'],
+            sec_tecnologia: sec_tecnologia as EncuestaPredialRecord['sec_tecnologia'],
+            sec_bosque:     sec_bosque     as EncuestaPredialRecord['sec_bosque'],
+          })
+        }
+      }
+
+      // Obtener predio_id si la encuesta tiene familia padre
+      let predio_id: string | null = null
+      if (enc.familia_local_id) {
+        const fam = await db.familias.filter(f => f.local_id === enc.familia_local_id).first()
+        predio_id = fam?.supabase_id ?? null
+      }
+
       const payload = {
         local_id:           enc.local_id,
         sync_origin:        'pwa',
@@ -231,14 +373,15 @@ export async function syncPendingEncuestas(): Promise<{ synced: number; errors: 
         fecha_encuesta:     enc.fecha_encuesta     || null,
         created_by:         enc.created_by         || null,
         step_completed:     enc.step_completed,
-        sec_general:        enc.sec_general,
-        sec_vivienda:       enc.sec_vivienda,
-        sec_familia:        enc.sec_familia,
-        sec_economia:       enc.sec_economia,
-        sec_cultivos:       enc.sec_cultivos,
-        sec_ganaderia:      enc.sec_ganaderia,
-        sec_tecnologia:     enc.sec_tecnologia,
-        sec_bosque:         enc.sec_bosque,
+        sec_general,
+        sec_vivienda,
+        sec_familia,
+        sec_economia,
+        sec_cultivos,
+        sec_ganaderia,
+        sec_tecnologia,
+        sec_bosque,
+        predio_id,
         updated_at:         new Date().toISOString(),
       }
 

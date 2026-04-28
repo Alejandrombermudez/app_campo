@@ -8,3 +8,11 @@ export const supabase = createClient(url, key)
 /** Tabla evaluaciones_campo en schema siembra */
 export const evalTable = () =>
   supabase.schema('siembra').from('evaluaciones_campo')
+
+/** Tabla familias (encuestas prediales) en schema siembra */
+export const encTable = () =>
+  supabase.schema('siembra').from('familias')
+
+/** Tabla predios (familias padre) en schema siembra */
+export const prediosTable = () =>
+  supabase.schema('siembra').from('predios')

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Plus, RefreshCw, Wifi, WifiOff, Trash2, ChevronRight,
   Copy, ChevronDown, ChevronUp, User, Globe, BarChart2,
-  CheckCircle, Clock, AlertCircle,
+  CheckCircle, Clock, AlertCircle, Loader2, Download,
 } from 'lucide-react'
 import { db } from '../db/schema'
 import type { FamiliaRecord } from '../types/familia'
@@ -17,7 +17,7 @@ import {
   syncPendingPredios,
 } from '../lib/sync'
 import { useOnlineStatus } from '../lib/useOnlineStatus'
-import { supabase } from '../lib/supabase'
+import { supabase, evalTable, encTable } from '../lib/supabase'
 import { InstallBanner } from '../components/ui/InstallBanner'
 import { UserSetup } from '../components/ui/UserSetup'
 import { StatsTab } from './Stats'
@@ -233,40 +233,58 @@ function LocalEncCard({ enc, onDelete }: { enc: EncuestaPredialRecord; onDelete:
 }
 
 // ─── Tarjetas remotas ──────────────────────────────────────────────────────────
-function RemotePredioCard({ predio }: { predio: RemotePredio }) {
-  // Solo info básica de la familia — no tiene formularios hijos directos aquí
+function RemotePredioCard({ predio, onOpen }: { predio: RemotePredio; onOpen: () => Promise<void> }) {
+  const [loading, setLoading] = useState(false)
+  async function handle() {
+    setLoading(true)
+    try { await onOpen() } catch (e) { console.error(e) } finally { setLoading(false) }
+  }
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4">
-      <p className="font-semibold text-gray-800 truncate">{predio.nombre_predio || '(Sin nombre)'}</p>
-      <p className="text-sm text-gray-600 truncate">{predio.nombre_propietario}</p>
-      <p className="text-xs text-gray-500 mt-0.5 truncate">
-        {predio.municipio || '—'}{predio.vereda && ` · ${predio.vereda}`}
-        {predio.fecha && ` · ${new Date(predio.fecha + 'T00:00:00').toLocaleDateString('es-CO')}`}
-      </p>
-      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-        {predio.created_by && (
-          <span className="flex items-center gap-1 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-            <User size={10}/>{predio.created_by}
-          </span>
-        )}
-        <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">☁ Nube</span>
+    <button onClick={handle} disabled={loading}
+      className="w-full text-left bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 active:bg-gray-50 disabled:opacity-60">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-gray-800 truncate">{predio.nombre_predio || '(Sin nombre)'}</p>
+          <p className="text-sm text-gray-600 truncate">{predio.nombre_propietario}</p>
+          <p className="text-xs text-gray-500 mt-0.5 truncate">
+            {predio.municipio || '—'}{predio.vereda && ` · ${predio.vereda}`}
+            {predio.fecha && ` · ${new Date(predio.fecha + 'T00:00:00').toLocaleDateString('es-CO')}`}
+          </p>
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+            {predio.created_by && (
+              <span className="flex items-center gap-1 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                <User size={10}/>{predio.created_by}
+              </span>
+            )}
+            <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">☁ Nube</span>
+          </div>
+        </div>
+        {loading
+          ? <Loader2 size={16} className="text-[#0d7377] animate-spin flex-shrink-0 mt-1"/>
+          : <Download size={16} className="text-gray-300 flex-shrink-0 mt-1"/>}
       </div>
-    </div>
+    </button>
   )
 }
 
-function RemoteEvalCard({ ev }: { ev: RemoteEval }) {
-  const navigate  = useNavigate()
+function RemoteEvalCard({ ev, onOpen }: { ev: RemoteEval; onOpen: () => Promise<void> }) {
   const municipio = ev.seccion_1_data?.municipio ?? '—'
+  const [loading, setLoading] = useState(false)
+  async function handle() {
+    setLoading(true)
+    try { await onOpen() } catch (e) { console.error(e) } finally { setLoading(false) }
+  }
   return (
-    <button onClick={() => navigate(`/ver/campo/${ev.id}`)}
-      className="w-full text-left bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 active:bg-gray-50">
+    <button onClick={handle} disabled={loading}
+      className="w-full text-left bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 active:bg-gray-50 disabled:opacity-60">
       <div className="flex items-center justify-between gap-2 mb-0.5">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#0d7377]/10 text-[#0d7377] flex-shrink-0">CAMPO</span>
           <p className="font-semibold text-gray-800 truncate">{ev.nombre_predio || '(Sin nombre)'}</p>
         </div>
-        <ChevronRight size={16} className="text-gray-300 flex-shrink-0" />
+        {loading
+          ? <Loader2 size={16} className="text-[#0d7377] animate-spin flex-shrink-0"/>
+          : <Download size={16} className="text-gray-300 flex-shrink-0"/>}
       </div>
       <p className="text-xs text-gray-500 truncate">
         {municipio}{ev.fecha_visita && ` · ${new Date(ev.fecha_visita + 'T00:00:00').toLocaleDateString('es-CO')}`}
@@ -277,23 +295,29 @@ function RemoteEvalCard({ ev }: { ev: RemoteEval }) {
             <User size={10}/>{ev.created_by}
           </span>
         )}
-        <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">☁ Nube</span>
+        <span className="text-xs bg-[#0d7377]/10 text-[#0d7377] px-2 py-0.5 rounded-full text-xs">☁ Importar</span>
       </div>
     </button>
   )
 }
 
-function RemoteEncCard({ enc }: { enc: RemoteEnc }) {
-  const navigate = useNavigate()
+function RemoteEncCard({ enc, onOpen }: { enc: RemoteEnc; onOpen: () => Promise<void> }) {
+  const [loading, setLoading] = useState(false)
+  async function handle() {
+    setLoading(true)
+    try { await onOpen() } catch (e) { console.error(e) } finally { setLoading(false) }
+  }
   return (
-    <button onClick={() => navigate(`/ver/predial/${enc.id}`)}
-      className="w-full text-left bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 active:bg-gray-50">
+    <button onClick={handle} disabled={loading}
+      className="w-full text-left bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 active:bg-gray-50 disabled:opacity-60">
       <div className="flex items-center justify-between gap-2 mb-0.5">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 flex-shrink-0">PREDIAL</span>
           <p className="font-semibold text-gray-800 truncate">{enc.nombre_propietario || '(Sin nombre)'}</p>
         </div>
-        <ChevronRight size={16} className="text-gray-300 flex-shrink-0" />
+        {loading
+          ? <Loader2 size={16} className="text-emerald-600 animate-spin flex-shrink-0"/>
+          : <Download size={16} className="text-gray-300 flex-shrink-0"/>}
       </div>
       <p className="text-xs text-gray-500 truncate">
         {enc.municipio || '—'}{enc.vereda && ` · ${enc.vereda}`}
@@ -304,7 +328,7 @@ function RemoteEncCard({ enc }: { enc: RemoteEnc }) {
             <User size={10}/>{enc.created_by}
           </span>
         )}
-        <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">☁ Nube</span>
+        <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">☁ Importar</span>
       </div>
     </button>
   )
@@ -440,6 +464,182 @@ export function Home() {
     if (!window.confirm(`¿Eliminar encuesta de "${enc.nombre_propietario || 'sin nombre'}"?`)) return
     await db.encuestas.delete(enc.id!)
     await loadLocal()
+  }
+
+  // ─── Importar registro remoto (campo) y abrir localmente ────────────────────
+  async function handleOpenRemoteEval(remoteId: string) {
+    // ¿Ya existe local?
+    const existing = await db.evaluaciones.where('supabase_id').equals(remoteId).first()
+    if (existing) { navigate(`/evaluacion/${existing.local_id}`); return }
+
+    // Descargar registro completo
+    const { data, error } = await evalTable().select('*').eq('id', remoteId).single()
+    if (error || !data) throw new Error('No se pudo importar el registro de campo')
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const d = data as any
+    const newEval: EvaluacionRecord = {
+      local_id:         crypto.randomUUID(),
+      supabase_id:      remoteId,
+      familia_local_id: undefined,
+      sync_status:      'synced',
+      sync_error:       null,
+      created_at:       d.created_at,
+      updated_at:       d.updated_at ?? d.created_at,
+      step_completed:   d.step_completed ?? 0,
+      created_by:       d.created_by ?? '',
+      nombre_predio:    d.nombre_predio ?? '',
+      codigo_predio:    d.seccion_1_data?.codigo_predio ?? '',
+      municipio:        d.seccion_1_data?.municipio ?? '',
+      fecha_visita:     d.fecha_visita ?? '',
+      num_zonas:        d.num_zonas_eval ?? 1,
+      seccion_1:        d.seccion_1_data ?? {},
+      seccion_2:        d.seccion_2_data ?? {},
+      zonas:            d.zonas_data ?? [],
+      seccion_6:        d.seccion_6_data ?? {},
+      seccion_7:        {},
+    }
+    await db.evaluaciones.add(newEval)
+    await loadLocal()
+    navigate(`/evaluacion/${newEval.local_id}`)
+  }
+
+  // ─── Importar registro remoto (predial) y abrir localmente ──────────────────
+  async function handleOpenRemoteEnc(remoteId: string) {
+    const existing = await db.encuestas.where('supabase_id').equals(remoteId).first()
+    if (existing) { navigate(`/encuesta/${existing.local_id}`); return }
+
+    const { data, error } = await encTable().select('*').eq('id', remoteId).single()
+    if (error || !data) throw new Error('No se pudo importar la encuesta predial')
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const d = data as any
+    const newEnc: EncuestaPredialRecord = {
+      local_id:           crypto.randomUUID(),
+      supabase_id:        remoteId,
+      familia_local_id:   undefined,
+      sync_status:        'synced',
+      sync_error:         null,
+      created_at:         d.created_at,
+      updated_at:         d.updated_at ?? d.created_at,
+      step_completed:     d.step_completed ?? 0,
+      created_by:         d.created_by ?? '',
+      nombre_propietario: d.nombre_propietario ?? '',
+      municipio:          d.municipio ?? '',
+      vereda:             d.vereda ?? '',
+      fecha_encuesta:     d.fecha_encuesta ?? '',
+      sec_general:        d.sec_general    ?? {},
+      sec_vivienda:       d.sec_vivienda   ?? {},
+      sec_familia:        d.sec_familia    ?? {},
+      sec_economia:       d.sec_economia   ?? {},
+      sec_cultivos:       d.sec_cultivos   ?? [],
+      sec_ganaderia:      d.sec_ganaderia  ?? {},
+      sec_tecnologia:     d.sec_tecnologia ?? {},
+      sec_bosque:         d.sec_bosque     ?? {},
+    }
+    await db.encuestas.add(newEnc)
+    await loadLocal()
+    navigate(`/encuesta/${newEnc.local_id}`)
+  }
+
+  // ─── Importar familia remota (padre + hijos) ─────────────────────────────────
+  async function handleOpenRemotePrediofamilia(predio: RemotePredio) {
+    // ¿Ya existe local?
+    const existingFam = await db.familias.where('supabase_id').equals(predio.id).first()
+    if (existingFam) { navigate(`/familia/${existingFam.local_id}`); return }
+
+    // Crear familia local
+    const familiaLocalId = crypto.randomUUID()
+    await db.familias.add({
+      local_id:           familiaLocalId,
+      supabase_id:        predio.id,
+      sync_status:        'synced',
+      sync_error:         null,
+      created_at:         predio.created_at,
+      updated_at:         predio.created_at,
+      created_by:         predio.created_by ?? '',
+      nombre_predio:      predio.nombre_predio      ?? '',
+      nombre_propietario: predio.nombre_propietario ?? '',
+      municipio:          predio.municipio           ?? '',
+      vereda:             predio.vereda              ?? '',
+      fecha:              predio.fecha               ?? '',
+      contacto:           '',
+      departamento:       'Caquetá',
+      num_zonas:          predio.num_zonas           ?? 1,
+    } as FamiliaRecord)
+
+    // Intentar importar evaluación de campo vinculada (predio_id FK)
+    try {
+      const { data: evalData } = await evalTable()
+        .select('*').eq('predio_id', predio.id).maybeSingle()
+      if (evalData) {
+        const existingEval = await db.evaluaciones.where('supabase_id').equals(evalData.id).first()
+        if (!existingEval) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const d = evalData as any
+          await db.evaluaciones.add({
+            local_id:         crypto.randomUUID(),
+            supabase_id:      d.id,
+            familia_local_id: familiaLocalId,
+            sync_status:      'synced',
+            sync_error:       null,
+            created_at:       d.created_at,
+            updated_at:       d.updated_at ?? d.created_at,
+            step_completed:   d.step_completed ?? 0,
+            created_by:       d.created_by ?? '',
+            nombre_predio:    d.nombre_predio ?? '',
+            codigo_predio:    d.seccion_1_data?.codigo_predio ?? '',
+            municipio:        d.seccion_1_data?.municipio ?? '',
+            fecha_visita:     d.fecha_visita ?? '',
+            num_zonas:        d.num_zonas_eval ?? predio.num_zonas ?? 1,
+            seccion_1:        d.seccion_1_data ?? {},
+            seccion_2:        d.seccion_2_data ?? {},
+            zonas:            d.zonas_data ?? [],
+            seccion_6:        d.seccion_6_data ?? {},
+            seccion_7:        {},
+          } as EvaluacionRecord)
+        }
+      }
+    } catch { /* predio_id puede no estar aún en los registros anteriores */ }
+
+    // Intentar importar encuesta predial vinculada
+    try {
+      const { data: encData } = await encTable()
+        .select('*').eq('predio_id', predio.id).maybeSingle()
+      if (encData) {
+        const existingEnc = await db.encuestas.where('supabase_id').equals(encData.id).first()
+        if (!existingEnc) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const d = encData as any
+          await db.encuestas.add({
+            local_id:           crypto.randomUUID(),
+            supabase_id:        d.id,
+            familia_local_id:   familiaLocalId,
+            sync_status:        'synced',
+            sync_error:         null,
+            created_at:         d.created_at,
+            updated_at:         d.updated_at ?? d.created_at,
+            step_completed:     d.step_completed ?? 0,
+            created_by:         d.created_by ?? '',
+            nombre_propietario: d.nombre_propietario ?? '',
+            municipio:          d.municipio ?? '',
+            vereda:             d.vereda ?? '',
+            fecha_encuesta:     d.fecha_encuesta ?? '',
+            sec_general:        d.sec_general    ?? {},
+            sec_vivienda:       d.sec_vivienda   ?? {},
+            sec_familia:        d.sec_familia    ?? {},
+            sec_economia:       d.sec_economia   ?? {},
+            sec_cultivos:       d.sec_cultivos   ?? [],
+            sec_ganaderia:      d.sec_ganaderia  ?? {},
+            sec_tecnologia:     d.sec_tecnologia ?? {},
+            sec_bosque:         d.sec_bosque     ?? {},
+          } as EncuestaPredialRecord)
+        }
+      }
+    } catch { /* idem */ }
+
+    await loadLocal()
+    navigate(`/familia/${familiaLocalId}`)
   }
 
   // ─── Índices de hijos por familia ────────────────────────────────────────────
@@ -593,8 +793,14 @@ export function Home() {
               {/* Nuevas familias desde siembra.predios */}
               {remotePredios.length > 0 && (
                 <>
-                  <p className="text-xs text-gray-400 px-1">{remotePredios.length} familia(s) en la nube</p>
-                  {remotePredios.map(p => <RemotePredioCard key={p.id} predio={p} />)}
+                  <p className="text-xs text-gray-400 px-1">{remotePredios.length} familia(s) en la nube · toca para importar</p>
+                  {remotePredios.map(p => (
+                    <RemotePredioCard
+                      key={p.id}
+                      predio={p}
+                      onOpen={() => handleOpenRemotePrediofamilia(p)}
+                    />
+                  ))}
                 </>
               )}
 
@@ -602,17 +808,25 @@ export function Home() {
               {mixedRemote.length > 0 && (
                 <>
                   {remotePredios.length > 0 && (
-                    <p className="text-xs text-gray-400 px-1 pt-2">Registros anteriores en la nube</p>
+                    <p className="text-xs text-gray-400 px-1 pt-2">Registros anteriores en la nube · toca para importar</p>
                   )}
                   {!remotePredios.length && (
                     <p className="text-xs text-gray-400 px-1">
-                      {remoteEvals.length} campo + {remoteEncs.length} predial en la nube
+                      {remoteEvals.length} campo + {remoteEncs.length} predial en la nube · toca para importar
                     </p>
                   )}
                   {mixedRemote.map(item =>
                     item.type === 'eval'
-                      ? <RemoteEvalCard key={`re-${item.data.id}`} ev={item.data} />
-                      : <RemoteEncCard  key={`rn-${item.data.id}`} enc={item.data} />
+                      ? <RemoteEvalCard
+                          key={`re-${item.data.id}`}
+                          ev={item.data}
+                          onOpen={() => handleOpenRemoteEval(item.data.id)}
+                        />
+                      : <RemoteEncCard
+                          key={`rn-${item.data.id}`}
+                          enc={item.data}
+                          onOpen={() => handleOpenRemoteEnc(item.data.id)}
+                        />
                   )}
                 </>
               )}

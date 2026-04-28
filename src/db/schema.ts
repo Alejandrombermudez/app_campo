@@ -35,6 +35,13 @@ class AppDB extends Dexie {
       encuestas:    '++id, local_id, familia_local_id, sync_status, fecha_encuesta, municipio, updated_at',
       predios:      '++id, local_id, sync_status, fecha, municipio, updated_at',
     })
+    this.version(5).stores({
+      familias:     '++id, local_id, supabase_id, sync_status, municipio, updated_at',
+      evaluaciones: '++id, local_id, supabase_id, familia_local_id, sync_status, fecha_visita, updated_at',
+      photos:       '++id, local_evaluacion_id, field_key, sync_status',
+      encuestas:    '++id, local_id, supabase_id, familia_local_id, sync_status, fecha_encuesta, municipio, updated_at',
+      predios:      '++id, local_id, sync_status, fecha, municipio, updated_at',
+    })
   }
 }
 
