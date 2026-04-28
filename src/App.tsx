@@ -6,6 +6,8 @@ import { EncuestaPage } from './pages/Encuesta'
 import { PredioPage } from './pages/Predio'
 import { FamiliaPage } from './pages/Familia'
 import { FamiliaDetail } from './pages/Familia/FamiliaDetail'
+import { CampoViewer } from './pages/Ver/CampoViewer'
+import { PredialViewer } from './pages/Ver/PredialViewer'
 import { useOnlineStatus } from './lib/useOnlineStatus'
 import {
   syncPendingFamilias,
@@ -48,6 +50,9 @@ export default function App() {
         {/* Formulario unificado legacy */}
         <Route path="/predio/nueva"     element={<PredioPage />} />
         <Route path="/predio/:id"       element={<PredioPage />} />
+        {/* Visualizadores de registros remotos (solo lectura) */}
+        <Route path="/ver/campo/:id"   element={<CampoViewer />} />
+        <Route path="/ver/predial/:id" element={<PredialViewer />} />
         {/* Legacy — acceso a registros anteriores */}
         <Route path="/evaluacion/nueva" element={<EvaluacionPage />} />
         <Route path="/evaluacion/:id"   element={<EvaluacionPage />} />

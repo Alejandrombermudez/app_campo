@@ -234,6 +234,7 @@ function LocalEncCard({ enc, onDelete }: { enc: EncuestaPredialRecord; onDelete:
 
 // ─── Tarjetas remotas ──────────────────────────────────────────────────────────
 function RemotePredioCard({ predio }: { predio: RemotePredio }) {
+  // Solo info básica de la familia — no tiene formularios hijos directos aquí
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4">
       <p className="font-semibold text-gray-800 truncate">{predio.nombre_predio || '(Sin nombre)'}</p>
@@ -255,12 +256,17 @@ function RemotePredioCard({ predio }: { predio: RemotePredio }) {
 }
 
 function RemoteEvalCard({ ev }: { ev: RemoteEval }) {
+  const navigate  = useNavigate()
   const municipio = ev.seccion_1_data?.municipio ?? '—'
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4">
-      <div className="flex items-center gap-2 mb-0.5">
-        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#0d7377]/10 text-[#0d7377]">CAMPO</span>
-        <p className="font-semibold text-gray-800 truncate">{ev.nombre_predio || '(Sin nombre)'}</p>
+    <button onClick={() => navigate(`/ver/campo/${ev.id}`)}
+      className="w-full text-left bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 active:bg-gray-50">
+      <div className="flex items-center justify-between gap-2 mb-0.5">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#0d7377]/10 text-[#0d7377] flex-shrink-0">CAMPO</span>
+          <p className="font-semibold text-gray-800 truncate">{ev.nombre_predio || '(Sin nombre)'}</p>
+        </div>
+        <ChevronRight size={16} className="text-gray-300 flex-shrink-0" />
       </div>
       <p className="text-xs text-gray-500 truncate">
         {municipio}{ev.fecha_visita && ` · ${new Date(ev.fecha_visita + 'T00:00:00').toLocaleDateString('es-CO')}`}
@@ -273,16 +279,21 @@ function RemoteEvalCard({ ev }: { ev: RemoteEval }) {
         )}
         <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">☁ Nube</span>
       </div>
-    </div>
+    </button>
   )
 }
 
 function RemoteEncCard({ enc }: { enc: RemoteEnc }) {
+  const navigate = useNavigate()
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4">
-      <div className="flex items-center gap-2 mb-0.5">
-        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">PREDIAL</span>
-        <p className="font-semibold text-gray-800 truncate">{enc.nombre_propietario || '(Sin nombre)'}</p>
+    <button onClick={() => navigate(`/ver/predial/${enc.id}`)}
+      className="w-full text-left bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 active:bg-gray-50">
+      <div className="flex items-center justify-between gap-2 mb-0.5">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 flex-shrink-0">PREDIAL</span>
+          <p className="font-semibold text-gray-800 truncate">{enc.nombre_propietario || '(Sin nombre)'}</p>
+        </div>
+        <ChevronRight size={16} className="text-gray-300 flex-shrink-0" />
       </div>
       <p className="text-xs text-gray-500 truncate">
         {enc.municipio || '—'}{enc.vereda && ` · ${enc.vereda}`}
@@ -295,7 +306,7 @@ function RemoteEncCard({ enc }: { enc: RemoteEnc }) {
         )}
         <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">☁ Nube</span>
       </div>
-    </div>
+    </button>
   )
 }
 
