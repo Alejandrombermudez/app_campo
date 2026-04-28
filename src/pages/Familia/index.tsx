@@ -1,8 +1,9 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Save } from 'lucide-react'
 import { db } from '../../db/schema'
 import { newFamilia } from '../../types/familia'
+import type { FamiliaRecord } from '../../types/familia'
 
 const MUNICIPIOS = [
   'Albania', 'Belén de los Andaquíes', 'Cartagena del Chairá', 'Curillo',
@@ -12,12 +13,25 @@ const MUNICIPIOS = [
 ]
 
 export function FamiliaPage() {
+  const { id }   = useParams<{ id?: string }>()
   const navigate = useNavigate()
-  const [familia, setFamilia] = useState(newFamilia())
-  const [saving, setSaving]   = useState(false)
-  const [errors, setErrors]   = useState<string[]>([])
+  const isEdit   = !!id
 
-  function set<K extends keyof typeof familia>(k: K, v: (typeof familia)[K]) {
+  const [familia, setFamilia] = useState<FamiliaRecord>(newFamilia())
+  const [saving,  setSaving]  = useState(false)
+  const [loaded,  setLoaded]  = useState(!isEdit)
+  const [errors,  setErrors]  = useState<string[]>([])
+
+  // Cargar familia existente en modo edición
+  useEffect(() => {
+    if (!isEdit) return
+    db.familias.where('local_id').equals(id!).first().then(found => {
+      if (found) setFamilia(found)
+      setLoaded(true)
+    })
+  }, [id, isEdit])
+
+  function set<K extends keyof FamiliaRecord>(k: K, v: FamiliaRecord[K]) {
     setFamilia(p => ({ ...p, [k]: v }))
     if (errors.length) setErrors([])
   }
@@ -32,24 +46,50 @@ export function FamiliaPage() {
 
     setSaving(true)
     try {
-      await db.familias.add({ ...familia, updated_at: new Date().toISOString() })
+      const now = new Date().toISOString()
+      if (isEdit && familia.id) {
+        // Edición: marcar pending para re-sincronizar
+        await db.familias.put({
+          ...familia,
+          sync_status: 'pending',
+          updated_at:  now,
+        })
+      } else {
+        // Creación nueva
+        await db.familias.add({ ...familia, updated_at: now })
+      }
       navigate(`/familia/${familia.local_id}`)
     } finally {
       setSaving(false)
     }
   }
 
+  function handleBack() {
+    if (isEdit) navigate(`/familia/${id}`)
+    else navigate('/')
+  }
+
+  if (!loaded) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0d7377]" />
+    </div>
+  )
+
   return (
     <div className="min-h-screen flex flex-col bg-[#f0fafa]">
 
       {/* Header */}
       <header className="bg-[#0d7377] text-white px-4 py-3 flex items-center gap-3">
-        <button onClick={() => navigate('/')} className="p-1 rounded">
+        <button onClick={handleBack} className="p-1 rounded">
           <ArrowLeft size={20} />
         </button>
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-sm">Nueva familia / predio</p>
-          <p className="text-xs opacity-60">Paso previo a los formularios</p>
+          <p className="font-semibold text-sm">
+            {isEdit ? 'Editar familia / predio' : 'Nueva familia / predio'}
+          </p>
+          <p className="text-xs opacity-60">
+            {isEdit ? familia.nombre_predio || '—' : 'Paso previo a los formularios'}
+          </p>
         </div>
       </header>
 
@@ -145,7 +185,7 @@ export function FamiliaPage() {
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1">
             Número de zonas
-            <span className="ml-1 font-normal text-gray-400">(para la evaluación de campo)</span>
+            <span className="ml-1 font-normal text-gray-400">(evaluación de campo)</span>
           </label>
           <select
             value={familia.num_zonas}
@@ -156,6 +196,11 @@ export function FamiliaPage() {
               <option key={n} value={n}>{n} zona{n > 1 ? 's' : ''}</option>
             ))}
           </select>
+          {isEdit && (
+            <p className="text-xs text-amber-600 mt-1">
+              Si ya hay una evaluación de campo iniciada, el cambio de zonas no la modifica automáticamente.
+            </p>
+          )}
         </div>
 
       </main>
@@ -168,7 +213,7 @@ export function FamiliaPage() {
         >
           {saving
             ? <span className="animate-pulse">Guardando…</span>
-            : <><Save size={16} /> Crear familia</>}
+            : <><Save size={16} /> {isEdit ? 'Guardar cambios' : 'Crear familia'}</>}
         </button>
       </footer>
     </div>

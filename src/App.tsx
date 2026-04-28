@@ -42,8 +42,9 @@ export default function App() {
       <Routes>
         <Route path="/"                 element={<Home />} />
         {/* Familia (nuevo flujo padre-hijos) */}
-        <Route path="/familia/nueva"    element={<FamiliaPage />} />
-        <Route path="/familia/:id"      element={<FamiliaDetail />} />
+        <Route path="/familia/nueva"        element={<FamiliaPage />} />
+        <Route path="/familia/:id/editar"   element={<FamiliaPage />} />
+        <Route path="/familia/:id"          element={<FamiliaDetail />} />
         {/* Formulario unificado legacy */}
         <Route path="/predio/nueva"     element={<PredioPage />} />
         <Route path="/predio/:id"       element={<PredioPage />} />

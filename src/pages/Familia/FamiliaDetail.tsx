@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ClipboardList, BarChart2, ChevronRight, CheckCircle, Clock, AlertCircle, Loader2 } from 'lucide-react'
+import { ArrowLeft, ClipboardList, BarChart2, ChevronRight, CheckCircle, Clock, AlertCircle, Loader2, Pencil } from 'lucide-react'
 import { db } from '../../db/schema'
 import type { FamiliaRecord } from '../../types/familia'
 import type { EvaluacionRecord, ZonaData } from '../../types/evaluacion'
@@ -204,6 +204,13 @@ export function FamiliaDetail() {
             {familia.municipio}{familia.vereda && ` · ${familia.vereda}`}
           </p>
         </div>
+        <button
+          onClick={() => navigate(`/familia/${familia.local_id}/editar`)}
+          className="p-2 rounded-lg bg-white/15 hover:bg-white/25 transition-colors"
+          title="Editar datos de la familia"
+        >
+          <Pencil size={16} />
+        </button>
       </header>
 
       <main className="flex-1 px-4 py-5 space-y-4">
