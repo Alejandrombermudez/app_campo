@@ -181,6 +181,7 @@ export interface EncuestaBosque {
 export interface EncuestaPredialRecord {
   id?: number
   local_id: string
+  familia_local_id?: string           // FK a FamiliaRecord.local_id
   supabase_id: string | null
   sync_status: 'pending' | 'synced' | 'error'
   sync_error: string | null

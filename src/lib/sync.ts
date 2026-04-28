@@ -2,8 +2,9 @@ import { db } from '../db/schema'
 import { supabase, evalTable } from './supabase'
 import type { PhotoRecord } from '../types/evaluacion'
 
-function encTable()    { return supabase.schema('siembra').from('familias') }
-function predioTable() { return supabase.schema('siembra').from('evaluaciones_campo') }
+function encTable()     { return supabase.schema('siembra').from('familias') }
+function predioTable()  { return supabase.schema('siembra').from('evaluaciones_campo') }
+function familiaTable() { return supabase.schema('siembra').from('predios') }
 
 // ─── Subir una foto al bucket campo-fotos ────────────────────────────────────
 async function uploadPhoto(photo: PhotoRecord, localId: string): Promise<string | null> {
@@ -44,6 +45,64 @@ async function uploadSignature(dataURL: string, localId: string, role: string): 
 
   const { data } = supabase.storage.from('campo-fotos').getPublicUrl(path)
   return data.publicUrl
+}
+
+// ─── Sincronizar familias/predios padre → siembra.predios ────────────────────
+export async function syncPendingFamilias(): Promise<{ synced: number; errors: number }> {
+  if (!navigator.onLine) return { synced: 0, errors: 0 }
+
+  const pending = await db.familias
+    .where('sync_status').anyOf(['pending', 'error'])
+    .toArray()
+
+  let synced = 0, errors = 0
+
+  for (const familia of pending) {
+    try {
+      const payload = {
+        local_id:           familia.local_id,
+        nombre_predio:      familia.nombre_predio      || null,
+        nombre_propietario: familia.nombre_propietario || null,
+        municipio:          familia.municipio          || null,
+        vereda:             familia.vereda             || null,
+        fecha:              familia.fecha              || null,
+        contacto:           familia.contacto           || null,
+        departamento:       familia.departamento       || 'Caquetá',
+        num_zonas:          familia.num_zonas,
+        created_by:         familia.created_by         || null,
+        sync_origin:        'pwa',
+        updated_at:         new Date().toISOString(),
+      }
+
+      const { data, error } = await familiaTable()
+        .upsert(payload, { onConflict: 'local_id' })
+        .select('id')
+        .single()
+
+      if (error) {
+        const supMsg = [error.message, error.details, error.hint, error.code]
+          .filter(Boolean).join(' | ')
+        throw new Error(supMsg || JSON.stringify(error))
+      }
+
+      await db.familias.update(familia.id!, {
+        sync_status: 'synced',
+        sync_error:  null,
+        supabase_id: data?.id ?? null,
+        updated_at:  new Date().toISOString(),
+      })
+      synced++
+    } catch (err: unknown) {
+      const msg = err instanceof Error
+        ? err.message
+        : (typeof err === 'object' ? JSON.stringify(err) : String(err))
+      console.error('[sync familia] error:', msg)
+      await db.familias.update(familia.id!, { sync_status: 'error', sync_error: msg })
+      errors++
+    }
+  }
+
+  return { synced, errors }
 }
 
 // ─── Sincronizar evaluaciones pendientes → Supabase ──────────────────────────

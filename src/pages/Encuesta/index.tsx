@@ -134,8 +134,11 @@ export function EncuestaPage() {
       <p className="text-gray-600 text-center text-sm">
         Los datos se sincronizarán automáticamente cuando haya internet.
       </p>
-      <button onClick={() => navigate('/')} className="bg-[#0d7377] text-white px-6 py-3 rounded-xl font-semibold">
-        Ir al inicio
+      <button
+        onClick={() => navigate(ev.familia_local_id ? `/familia/${ev.familia_local_id}` : '/')}
+        className="bg-[#0d7377] text-white px-6 py-3 rounded-xl font-semibold"
+      >
+        {ev.familia_local_id ? 'Volver a la familia' : 'Ir al inicio'}
       </button>
     </div>
   )

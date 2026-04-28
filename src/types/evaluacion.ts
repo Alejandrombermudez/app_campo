@@ -101,6 +101,7 @@ export interface ZonaData {
 export interface EvaluacionRecord {
   id?: number                         // auto-increment Dexie
   local_id: string                    // UUID cliente
+  familia_local_id?: string           // FK a FamiliaRecord.local_id
   supabase_id: string | null
   sync_status: 'pending' | 'synced' | 'error'
   sync_error: string | null

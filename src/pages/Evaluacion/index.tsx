@@ -199,10 +199,10 @@ export function EvaluacionPage() {
         Los datos se guardarán localmente y se sincronizarán con el servidor cuando haya internet.
       </p>
       <button
-        onClick={() => navigate('/')}
+        onClick={() => navigate(ev.familia_local_id ? `/familia/${ev.familia_local_id}` : '/')}
         className="bg-[#0d7377] text-white px-6 py-3 rounded-xl font-semibold"
       >
-        Ir al inicio
+        {ev.familia_local_id ? 'Volver a la familia' : 'Ir al inicio'}
       </button>
     </div>
   )
