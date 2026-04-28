@@ -226,9 +226,10 @@ export async function syncPendingEvaluaciones(): Promise<{ synced: number; error
       let seccion_2 = ev.seccion_2 as Record<string, unknown>
       let seccion_6 = ev.seccion_6 as Record<string, unknown>
 
+      let finalStepCompleted = ev.step_completed
       if (ev.supabase_id) {
         const { data: remote } = await evalTable()
-          .select('seccion_1_data, seccion_2_data, zonas_data, seccion_6_data')
+          .select('seccion_1_data, seccion_2_data, zonas_data, seccion_6_data, step_completed')
           .eq('id', ev.supabase_id)
           .single()
         if (remote) {
@@ -238,12 +239,15 @@ export async function syncPendingEvaluaciones(): Promise<{ synced: number; error
           seccion_2  = mergeJsonb(r.seccion_2_data ?? {}, seccion_2)
           zonas_data = mergeZonas(r.zonas_data     ?? [], zonas_data as ZonaData[]) as typeof zonas_data
           seccion_6  = mergeJsonb(r.seccion_6_data ?? {}, seccion_6)
+          // step_completed: tomar el máximo entre local y remoto (nunca retroceder)
+          finalStepCompleted = Math.max(ev.step_completed, r.step_completed ?? 0)
           // Actualizar Dexie local con el merged result
           await db.evaluaciones.update(ev.id!, {
-            seccion_1: seccion_1 as EvaluacionRecord['seccion_1'],
-            seccion_2: seccion_2 as EvaluacionRecord['seccion_2'],
-            zonas:     zonas_data as EvaluacionRecord['zonas'],
-            seccion_6: seccion_6 as EvaluacionRecord['seccion_6'],
+            seccion_1:      seccion_1 as EvaluacionRecord['seccion_1'],
+            seccion_2:      seccion_2 as EvaluacionRecord['seccion_2'],
+            zonas:          zonas_data as EvaluacionRecord['zonas'],
+            seccion_6:      seccion_6 as EvaluacionRecord['seccion_6'],
+            step_completed: finalStepCompleted,
           })
         }
       }
@@ -263,7 +267,7 @@ export async function syncPendingEvaluaciones(): Promise<{ synced: number; error
         nombre_predio:  ev.nombre_predio,
         fecha_visita:   ev.fecha_visita || null,
         num_zonas_eval: ev.num_zonas,
-        step_completed: ev.step_completed,
+        step_completed: finalStepCompleted,
         created_by:     ev.created_by || null,
         seccion_1_data: seccion_1,
         seccion_2_data: seccion_2,
@@ -327,9 +331,10 @@ export async function syncPendingEncuestas(): Promise<{ synced: number; errors: 
       let sec_tecnologia = enc.sec_tecnologia as Record<string, unknown>
       let sec_bosque     = enc.sec_bosque     as Record<string, unknown>
 
+      let finalStepCompleted = enc.step_completed
       if (enc.supabase_id) {
         const { data: remote } = await encTable()
-          .select('sec_general, sec_vivienda, sec_familia, sec_economia, sec_cultivos, sec_ganaderia, sec_tecnologia, sec_bosque')
+          .select('sec_general, sec_vivienda, sec_familia, sec_economia, sec_cultivos, sec_ganaderia, sec_tecnologia, sec_bosque, step_completed')
           .eq('id', enc.supabase_id)
           .single()
         if (remote) {
@@ -343,6 +348,7 @@ export async function syncPendingEncuestas(): Promise<{ synced: number; errors: 
           sec_ganaderia  = mergeJsonb(r.sec_ganaderia  ?? {}, sec_ganaderia)
           sec_tecnologia = mergeJsonb(r.sec_tecnologia ?? {}, sec_tecnologia)
           sec_bosque     = mergeJsonb(r.sec_bosque     ?? {}, sec_bosque)
+          finalStepCompleted = Math.max(enc.step_completed, r.step_completed ?? 0)
           // Actualizar Dexie local
           await db.encuestas.update(enc.id!, {
             sec_general:    sec_general    as EncuestaPredialRecord['sec_general'],
@@ -353,6 +359,7 @@ export async function syncPendingEncuestas(): Promise<{ synced: number; errors: 
             sec_ganaderia:  sec_ganaderia  as EncuestaPredialRecord['sec_ganaderia'],
             sec_tecnologia: sec_tecnologia as EncuestaPredialRecord['sec_tecnologia'],
             sec_bosque:     sec_bosque     as EncuestaPredialRecord['sec_bosque'],
+            step_completed: finalStepCompleted,
           })
         }
       }
@@ -372,7 +379,7 @@ export async function syncPendingEncuestas(): Promise<{ synced: number; errors: 
         vereda:             enc.vereda             || null,
         fecha_encuesta:     enc.fecha_encuesta     || null,
         created_by:         enc.created_by         || null,
-        step_completed:     enc.step_completed,
+        step_completed:     finalStepCompleted,
         sec_general,
         sec_vivienda,
         sec_familia,

@@ -35,11 +35,13 @@ interface RemoteEval {
   fecha_visita: string | null; num_zonas_eval: number | null
   created_by: string | null; seccion_1_data: { municipio?: string } | null
   sync_origin: string | null; created_at: string
+  predio_id: string | null; step_completed: number | null
 }
 interface RemoteEnc {
   id: string; local_id: string | null; nombre_propietario: string | null
   municipio: string | null; vereda: string | null
   fecha_encuesta: string | null; created_by: string | null; created_at: string
+  predio_id: string | null; step_completed: number | null
 }
 
 // ─── Estado sync ───────────────────────────────────────────────────────────────
@@ -233,12 +235,27 @@ function LocalEncCard({ enc, onDelete }: { enc: EncuestaPredialRecord; onDelete:
 }
 
 // ─── Tarjetas remotas ──────────────────────────────────────────────────────────
-function RemotePredioCard({ predio, onOpen }: { predio: RemotePredio; onOpen: () => Promise<void> }) {
+function RemotePredioCard({
+  predio, linkedEval, linkedEnc, onOpen,
+}: {
+  predio: RemotePredio
+  linkedEval?: RemoteEval | null
+  linkedEnc?: RemoteEnc | null
+  onOpen: () => Promise<void>
+}) {
   const [loading, setLoading] = useState(false)
   async function handle() {
     setLoading(true)
     try { await onOpen() } catch (e) { console.error(e) } finally { setLoading(false) }
   }
+
+  const numZonas   = predio.num_zonas ?? 1
+  const totalCampo = 4 + 3 * Math.max(1, numZonas)
+  const campoStatus: FormStatus = !linkedEval ? 'pendiente'
+    : (linkedEval.step_completed ?? 0) >= totalCampo - 1 ? 'completo' : 'en_curso'
+  const predialStatus: FormStatus = !linkedEnc ? 'pendiente'
+    : (linkedEnc.step_completed ?? 0) >= 7 ? 'completo' : 'en_curso'
+
   return (
     <button onClick={handle} disabled={loading}
       className="w-full text-left bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 active:bg-gray-50 disabled:opacity-60">
@@ -251,13 +268,14 @@ function RemotePredioCard({ predio, onOpen }: { predio: RemotePredio; onOpen: ()
             {predio.fecha && ` · ${new Date(predio.fecha + 'T00:00:00').toLocaleDateString('es-CO')}`}
           </p>
           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-            {predio.created_by && (
-              <span className="flex items-center gap-1 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                <User size={10}/>{predio.created_by}
-              </span>
-            )}
-            <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">☁ Nube</span>
+            <FormPill label="Campo"   status={campoStatus} />
+            <FormPill label="Predial" status={predialStatus} />
           </div>
+          {predio.created_by && (
+            <span className="flex items-center gap-1 text-xs text-gray-400 mt-1">
+              <User size={10}/>{predio.created_by} · ☁ Toca para importar
+            </span>
+          )}
         </div>
         {loading
           ? <Loader2 size={16} className="text-[#0d7377] animate-spin flex-shrink-0 mt-1"/>
@@ -389,11 +407,11 @@ export function Home() {
       // Siempre cargar las tablas legacy para registros anteriores
       const [{ data: de }, { data: dn }] = await Promise.all([
         supabase.schema('siembra').from('evaluaciones_campo')
-          .select('id, local_id, nombre_predio, fecha_visita, num_zonas_eval, created_by, seccion_1_data, sync_origin, created_at')
-          .order('created_at', { ascending: false }).limit(50),
+          .select('id, local_id, nombre_predio, fecha_visita, num_zonas_eval, created_by, seccion_1_data, sync_origin, created_at, predio_id, step_completed')
+          .order('created_at', { ascending: false }).limit(100),
         supabase.schema('siembra').from('familias')
-          .select('id, local_id, nombre_propietario, municipio, vereda, fecha_encuesta, created_by, created_at')
-          .order('created_at', { ascending: false }).limit(50),
+          .select('id, local_id, nombre_propietario, municipio, vereda, fecha_encuesta, created_by, created_at, predio_id, step_completed')
+          .order('created_at', { ascending: false }).limit(100),
       ])
       if (de) setRemoteEvals(de as RemoteEval[])
       if (dn) setRemoteEncs(dn as RemoteEnc[])
@@ -467,21 +485,36 @@ export function Home() {
   }
 
   // ─── Importar registro remoto (campo) y abrir localmente ────────────────────
-  async function handleOpenRemoteEval(remoteId: string) {
+  async function handleOpenRemoteEval(ev: RemoteEval) {
     // ¿Ya existe local?
-    const existing = await db.evaluaciones.where('supabase_id').equals(remoteId).first()
-    if (existing) { navigate(`/evaluacion/${existing.local_id}`); return }
+    const existing = await db.evaluaciones.where('supabase_id').equals(ev.id).first()
+    if (existing) {
+      // Si aún no está vinculado a ninguna familia, intentar vincularlo
+      if (!existing.familia_local_id && ev.predio_id) {
+        const localFam = await db.familias.where('supabase_id').equals(ev.predio_id).first()
+        if (localFam) await db.evaluaciones.update(existing.id!, { familia_local_id: localFam.local_id })
+      }
+      navigate(`/evaluacion/${existing.local_id}`)
+      return
+    }
 
     // Descargar registro completo
-    const { data, error } = await evalTable().select('*').eq('id', remoteId).single()
+    const { data, error } = await evalTable().select('*').eq('id', ev.id).single()
     if (error || !data) throw new Error('No se pudo importar el registro de campo')
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const d = data as any
+    // Intentar vincular a familia local
+    let familia_local_id: string | undefined
+    if (ev.predio_id) {
+      const localFam = await db.familias.where('supabase_id').equals(ev.predio_id).first()
+      familia_local_id = localFam?.local_id
+    }
+
     const newEval: EvaluacionRecord = {
       local_id:         crypto.randomUUID(),
-      supabase_id:      remoteId,
-      familia_local_id: undefined,
+      supabase_id:      ev.id,
+      familia_local_id,
       sync_status:      'synced',
       sync_error:       null,
       created_at:       d.created_at,
@@ -501,23 +534,38 @@ export function Home() {
     }
     await db.evaluaciones.add(newEval)
     await loadLocal()
-    navigate(`/evaluacion/${newEval.local_id}`)
+    // Si quedó vinculado a una familia, abrir FamiliaDetail; si no, abrir el formulario
+    if (familia_local_id) navigate(`/familia/${familia_local_id}`)
+    else navigate(`/evaluacion/${newEval.local_id}`)
   }
 
   // ─── Importar registro remoto (predial) y abrir localmente ──────────────────
-  async function handleOpenRemoteEnc(remoteId: string) {
-    const existing = await db.encuestas.where('supabase_id').equals(remoteId).first()
-    if (existing) { navigate(`/encuesta/${existing.local_id}`); return }
+  async function handleOpenRemoteEnc(enc: RemoteEnc) {
+    const existing = await db.encuestas.where('supabase_id').equals(enc.id).first()
+    if (existing) {
+      if (!existing.familia_local_id && enc.predio_id) {
+        const localFam = await db.familias.where('supabase_id').equals(enc.predio_id).first()
+        if (localFam) await db.encuestas.update(existing.id!, { familia_local_id: localFam.local_id })
+      }
+      navigate(`/encuesta/${existing.local_id}`)
+      return
+    }
 
-    const { data, error } = await encTable().select('*').eq('id', remoteId).single()
+    const { data, error } = await encTable().select('*').eq('id', enc.id).single()
     if (error || !data) throw new Error('No se pudo importar la encuesta predial')
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const d = data as any
+    let familia_local_id: string | undefined
+    if (enc.predio_id) {
+      const localFam = await db.familias.where('supabase_id').equals(enc.predio_id).first()
+      familia_local_id = localFam?.local_id
+    }
+
     const newEnc: EncuestaPredialRecord = {
       local_id:           crypto.randomUUID(),
-      supabase_id:        remoteId,
-      familia_local_id:   undefined,
+      supabase_id:        enc.id,
+      familia_local_id,
       sync_status:        'synced',
       sync_error:         null,
       created_at:         d.created_at,
@@ -539,44 +587,53 @@ export function Home() {
     }
     await db.encuestas.add(newEnc)
     await loadLocal()
-    navigate(`/encuesta/${newEnc.local_id}`)
+    if (familia_local_id) navigate(`/familia/${familia_local_id}`)
+    else navigate(`/encuesta/${newEnc.local_id}`)
   }
 
   // ─── Importar familia remota (padre + hijos) ─────────────────────────────────
+  // También llama cuando la familia ya existe localmente, para importar
+  // los formularios hijos que el otro colaborador haya llenado.
   async function handleOpenRemotePrediofamilia(predio: RemotePredio) {
-    // ¿Ya existe local?
+    // 1. Familia: encontrar o crear local
+    let familiaLocalId: string
     const existingFam = await db.familias.where('supabase_id').equals(predio.id).first()
-    if (existingFam) { navigate(`/familia/${existingFam.local_id}`); return }
+    if (existingFam) {
+      familiaLocalId = existingFam.local_id
+      // Actualizar num_zonas si el remoto tiene una versión más reciente
+      if (predio.num_zonas && predio.num_zonas !== existingFam.num_zonas) {
+        await db.familias.update(existingFam.id!, { num_zonas: predio.num_zonas })
+      }
+    } else {
+      familiaLocalId = crypto.randomUUID()
+      await db.familias.add({
+        local_id:           familiaLocalId,
+        supabase_id:        predio.id,
+        sync_status:        'synced',
+        sync_error:         null,
+        created_at:         predio.created_at,
+        updated_at:         predio.created_at,
+        created_by:         predio.created_by ?? '',
+        nombre_predio:      predio.nombre_predio      ?? '',
+        nombre_propietario: predio.nombre_propietario ?? '',
+        municipio:          predio.municipio          ?? '',
+        vereda:             predio.vereda             ?? '',
+        fecha:              predio.fecha              ?? '',
+        contacto:           '',
+        departamento:       'Caquetá',
+        num_zonas:          predio.num_zonas          ?? 1,
+      } as FamiliaRecord)
+    }
 
-    // Crear familia local
-    const familiaLocalId = crypto.randomUUID()
-    await db.familias.add({
-      local_id:           familiaLocalId,
-      supabase_id:        predio.id,
-      sync_status:        'synced',
-      sync_error:         null,
-      created_at:         predio.created_at,
-      updated_at:         predio.created_at,
-      created_by:         predio.created_by ?? '',
-      nombre_predio:      predio.nombre_predio      ?? '',
-      nombre_propietario: predio.nombre_propietario ?? '',
-      municipio:          predio.municipio           ?? '',
-      vereda:             predio.vereda              ?? '',
-      fecha:              predio.fecha               ?? '',
-      contacto:           '',
-      departamento:       'Caquetá',
-      num_zonas:          predio.num_zonas           ?? 1,
-    } as FamiliaRecord)
-
-    // Intentar importar evaluación de campo vinculada (predio_id FK)
+    // 2. Importar evaluación de campo vinculada (crea si falta; actualiza step_completed si mejoró)
     try {
       const { data: evalData } = await evalTable()
         .select('*').eq('predio_id', predio.id).maybeSingle()
       if (evalData) {
-        const existingEval = await db.evaluaciones.where('supabase_id').equals(evalData.id).first()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const d = evalData as any
+        const existingEval = await db.evaluaciones.where('supabase_id').equals(d.id).first()
         if (!existingEval) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const d = evalData as any
           await db.evaluaciones.add({
             local_id:         crypto.randomUUID(),
             supabase_id:      d.id,
@@ -598,19 +655,26 @@ export function Home() {
             seccion_6:        d.seccion_6_data ?? {},
             seccion_7:        {},
           } as EvaluacionRecord)
+        } else {
+          // Formulario ya existe: actualizar familia_local_id si no está vinculado, y step_completed si mejoró
+          const updates: Partial<EvaluacionRecord> = {}
+          if (!existingEval.familia_local_id) updates.familia_local_id = familiaLocalId
+          const remoteStep = d.step_completed ?? 0
+          if (remoteStep > (existingEval.step_completed ?? 0)) updates.step_completed = remoteStep
+          if (Object.keys(updates).length) await db.evaluaciones.update(existingEval.id!, updates)
         }
       }
-    } catch { /* predio_id puede no estar aún en los registros anteriores */ }
+    } catch { /* predio_id puede no estar aún en registros anteriores */ }
 
-    // Intentar importar encuesta predial vinculada
+    // 3. Importar encuesta predial vinculada (misma lógica)
     try {
       const { data: encData } = await encTable()
         .select('*').eq('predio_id', predio.id).maybeSingle()
       if (encData) {
-        const existingEnc = await db.encuestas.where('supabase_id').equals(encData.id).first()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const d = encData as any
+        const existingEnc = await db.encuestas.where('supabase_id').equals(d.id).first()
         if (!existingEnc) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const d = encData as any
           await db.encuestas.add({
             local_id:           crypto.randomUUID(),
             supabase_id:        d.id,
@@ -634,6 +698,12 @@ export function Home() {
             sec_tecnologia:     d.sec_tecnologia ?? {},
             sec_bosque:         d.sec_bosque     ?? {},
           } as EncuestaPredialRecord)
+        } else {
+          const updates: Partial<EncuestaPredialRecord> = {}
+          if (!existingEnc.familia_local_id) updates.familia_local_id = familiaLocalId
+          const remoteStep = d.step_completed ?? 0
+          if (remoteStep > (existingEnc.step_completed ?? 0)) updates.step_completed = remoteStep
+          if (Object.keys(updates).length) await db.encuestas.update(existingEnc.id!, updates)
         }
       }
     } catch { /* idem */ }
@@ -663,11 +733,15 @@ export function Home() {
 
   const hasLegacy = predios.length > 0 || orphanEvals.length > 0 || orphanEncs.length > 0
 
-  // Para "Todos": si hay predios en siembra.predios, mostrarlos; si no, mostrar las tablas legacy
+  // IDs de predios que ya tienen familia en siembra.predios
+  const predioIds = new Set(remotePredios.map(p => p.id))
+
+  // Para "Todos": registros que NO pertenecen a ninguna familia nueva (true legacy)
   type MixedRemote = { type: 'eval'; data: RemoteEval } | { type: 'enc'; data: RemoteEnc }
   const mixedRemote: MixedRemote[] = [
-    ...remoteEvals.map(e => ({ type: 'eval' as const, data: e })),
-    ...remoteEncs.map(e  => ({ type: 'enc'  as const, data: e })),
+    // Solo legacy: sin predio_id o con predio_id que no aparece en siembra.predios
+    ...remoteEvals.filter(e => !e.predio_id || !predioIds.has(e.predio_id)).map(e => ({ type: 'eval' as const, data: e })),
+    ...remoteEncs.filter(e  => !e.predio_id || !predioIds.has(e.predio_id)).map(e  => ({ type: 'enc'  as const, data: e })),
   ].sort((a, b) => b.data.created_at.localeCompare(a.data.created_at))
 
   const totalLocalCount = familias.length + predios.length + evals.length + encs.length
@@ -794,17 +868,23 @@ export function Home() {
               {remotePredios.length > 0 && (
                 <>
                   <p className="text-xs text-gray-400 px-1">{remotePredios.length} familia(s) en la nube · toca para importar</p>
-                  {remotePredios.map(p => (
-                    <RemotePredioCard
-                      key={p.id}
-                      predio={p}
-                      onOpen={() => handleOpenRemotePrediofamilia(p)}
-                    />
-                  ))}
+                  {remotePredios.map(p => {
+                    const linkedEval = remoteEvals.find(e => e.predio_id === p.id) ?? null
+                    const linkedEnc  = remoteEncs.find(e  => e.predio_id === p.id) ?? null
+                    return (
+                      <RemotePredioCard
+                        key={p.id}
+                        predio={p}
+                        linkedEval={linkedEval}
+                        linkedEnc={linkedEnc}
+                        onOpen={() => handleOpenRemotePrediofamilia(p)}
+                      />
+                    )
+                  })}
                 </>
               )}
 
-              {/* Registros legacy de evaluaciones_campo y familias */}
+              {/* Registros legacy sin familia padre */}
               {mixedRemote.length > 0 && (
                 <>
                   {remotePredios.length > 0 && (
@@ -812,7 +892,8 @@ export function Home() {
                   )}
                   {!remotePredios.length && (
                     <p className="text-xs text-gray-400 px-1">
-                      {remoteEvals.length} campo + {remoteEncs.length} predial en la nube · toca para importar
+                      {mixedRemote.filter(m => m.type === 'eval').length} campo +&nbsp;
+                      {mixedRemote.filter(m => m.type === 'enc').length} predial en la nube · toca para importar
                     </p>
                   )}
                   {mixedRemote.map(item =>
@@ -820,12 +901,12 @@ export function Home() {
                       ? <RemoteEvalCard
                           key={`re-${item.data.id}`}
                           ev={item.data}
-                          onOpen={() => handleOpenRemoteEval(item.data.id)}
+                          onOpen={() => handleOpenRemoteEval(item.data)}
                         />
                       : <RemoteEncCard
                           key={`rn-${item.data.id}`}
                           enc={item.data}
-                          onOpen={() => handleOpenRemoteEnc(item.data.id)}
+                          onOpen={() => handleOpenRemoteEnc(item.data)}
                         />
                   )}
                 </>
