@@ -17,7 +17,7 @@ import {
   syncPendingPredios,
 } from '../lib/sync'
 import { useOnlineStatus } from '../lib/useOnlineStatus'
-import { supabase, evalTable, encTable } from '../lib/supabase'
+import { supabase, evalTable, encTable, prediosTable } from '../lib/supabase'
 import { InstallBanner } from '../components/ui/InstallBanner'
 import { UserSetup } from '../components/ui/UserSetup'
 import { StatsTab } from './Stats'
@@ -236,17 +236,25 @@ function LocalEncCard({ enc, onDelete }: { enc: EncuestaPredialRecord; onDelete:
 
 // ─── Tarjetas remotas ──────────────────────────────────────────────────────────
 function RemotePredioCard({
-  predio, linkedEval, linkedEnc, onOpen,
+  predio, linkedEval, linkedEnc, onOpen, onDelete,
 }: {
   predio: RemotePredio
   linkedEval?: RemoteEval | null
   linkedEnc?: RemoteEnc | null
   onOpen: () => Promise<void>
+  onDelete: () => Promise<void>
 }) {
-  const [loading, setLoading] = useState(false)
+  const [loading,   setLoading]   = useState(false)
+  const [deleting,  setDeleting]  = useState(false)
+
   async function handle() {
     setLoading(true)
     try { await onOpen() } catch (e) { console.error(e) } finally { setLoading(false) }
+  }
+  async function handleDelete(e: React.MouseEvent) {
+    e.stopPropagation()
+    setDeleting(true)
+    try { await onDelete() } catch (err) { console.error(err) } finally { setDeleting(false) }
   }
 
   const numZonas   = predio.num_zonas ?? 1
@@ -257,98 +265,138 @@ function RemotePredioCard({
     : (linkedEnc.step_completed ?? 0) >= 7 ? 'completo' : 'en_curso'
 
   return (
-    <button onClick={handle} disabled={loading}
-      className="w-full text-left bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 active:bg-gray-50 disabled:opacity-60">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-gray-800 truncate">{predio.nombre_predio || '(Sin nombre)'}</p>
-          <p className="text-sm text-gray-600 truncate">{predio.nombre_propietario}</p>
-          <p className="text-xs text-gray-500 mt-0.5 truncate">
-            {predio.municipio || '—'}{predio.vereda && ` · ${predio.vereda}`}
-            {predio.fecha && ` · ${new Date(predio.fecha + 'T00:00:00').toLocaleDateString('es-CO')}`}
-          </p>
-          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-            <FormPill label="Campo"   status={campoStatus} />
-            <FormPill label="Predial" status={predialStatus} />
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <button onClick={handle} disabled={loading || deleting}
+        className="w-full text-left px-4 pt-4 pb-3 active:bg-gray-50 disabled:opacity-60">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-gray-800 truncate">{predio.nombre_predio || '(Sin nombre)'}</p>
+            <p className="text-sm text-gray-600 truncate">{predio.nombre_propietario}</p>
+            <p className="text-xs text-gray-500 mt-0.5 truncate">
+              {predio.municipio || '—'}{predio.vereda && ` · ${predio.vereda}`}
+              {predio.fecha && ` · ${new Date(predio.fecha + 'T00:00:00').toLocaleDateString('es-CO')}`}
+            </p>
+            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+              <FormPill label="Campo"   status={campoStatus} />
+              <FormPill label="Predial" status={predialStatus} />
+            </div>
           </div>
-          {predio.created_by && (
-            <span className="flex items-center gap-1 text-xs text-gray-400 mt-1">
-              <User size={10}/>{predio.created_by} · ☁ Toca para importar
-            </span>
-          )}
+          {loading
+            ? <Loader2 size={16} className="text-[#0d7377] animate-spin flex-shrink-0 mt-1"/>
+            : <Download size={16} className="text-gray-300 flex-shrink-0 mt-1"/>}
         </div>
-        {loading
-          ? <Loader2 size={16} className="text-[#0d7377] animate-spin flex-shrink-0 mt-1"/>
-          : <Download size={16} className="text-gray-300 flex-shrink-0 mt-1"/>}
+      </button>
+      <div className="border-t border-gray-50 px-4 py-2 flex items-center justify-between">
+        <span className="text-xs text-gray-400 flex items-center gap-1">
+          {predio.created_by && <><User size={10}/>{predio.created_by}</>}
+        </span>
+        <button onClick={handleDelete} disabled={loading || deleting}
+          className="text-xs text-red-400 flex items-center gap-1 disabled:opacity-40">
+          {deleting ? <Loader2 size={11} className="animate-spin"/> : <Trash2 size={11}/>} Eliminar
+        </button>
       </div>
-    </button>
+    </div>
   )
 }
 
-function RemoteEvalCard({ ev, onOpen }: { ev: RemoteEval; onOpen: () => Promise<void> }) {
+function RemoteEvalCard({
+  ev, onOpen, onDelete,
+}: {
+  ev: RemoteEval
+  onOpen: () => Promise<void>
+  onDelete: () => Promise<void>
+}) {
   const municipio = ev.seccion_1_data?.municipio ?? '—'
-  const [loading, setLoading] = useState(false)
+  const [loading,  setLoading]  = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
   async function handle() {
     setLoading(true)
     try { await onOpen() } catch (e) { console.error(e) } finally { setLoading(false) }
   }
+  async function handleDelete(e: React.MouseEvent) {
+    e.stopPropagation()
+    setDeleting(true)
+    try { await onDelete() } catch (err) { console.error(err) } finally { setDeleting(false) }
+  }
+
   return (
-    <button onClick={handle} disabled={loading}
-      className="w-full text-left bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 active:bg-gray-50 disabled:opacity-60">
-      <div className="flex items-center justify-between gap-2 mb-0.5">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#0d7377]/10 text-[#0d7377] flex-shrink-0">CAMPO</span>
-          <p className="font-semibold text-gray-800 truncate">{ev.nombre_predio || '(Sin nombre)'}</p>
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <button onClick={handle} disabled={loading || deleting}
+        className="w-full text-left px-4 pt-4 pb-3 active:bg-gray-50 disabled:opacity-60">
+        <div className="flex items-center justify-between gap-2 mb-0.5">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#0d7377]/10 text-[#0d7377] flex-shrink-0">CAMPO</span>
+            <p className="font-semibold text-gray-800 truncate">{ev.nombre_predio || '(Sin nombre)'}</p>
+          </div>
+          {loading
+            ? <Loader2 size={16} className="text-[#0d7377] animate-spin flex-shrink-0"/>
+            : <Download size={16} className="text-gray-300 flex-shrink-0"/>}
         </div>
-        {loading
-          ? <Loader2 size={16} className="text-[#0d7377] animate-spin flex-shrink-0"/>
-          : <Download size={16} className="text-gray-300 flex-shrink-0"/>}
+        <p className="text-xs text-gray-500 truncate">
+          {municipio}{ev.fecha_visita && ` · ${new Date(ev.fecha_visita + 'T00:00:00').toLocaleDateString('es-CO')}`}
+        </p>
+      </button>
+      <div className="border-t border-gray-50 px-4 py-2 flex items-center justify-between">
+        <span className="text-xs text-gray-400 flex items-center gap-1">
+          {ev.created_by && <><User size={10}/>{ev.created_by}</>}
+        </span>
+        <button onClick={handleDelete} disabled={loading || deleting}
+          className="text-xs text-red-400 flex items-center gap-1 disabled:opacity-40">
+          {deleting ? <Loader2 size={11} className="animate-spin"/> : <Trash2 size={11}/>} Eliminar
+        </button>
       </div>
-      <p className="text-xs text-gray-500 truncate">
-        {municipio}{ev.fecha_visita && ` · ${new Date(ev.fecha_visita + 'T00:00:00').toLocaleDateString('es-CO')}`}
-      </p>
-      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-        {ev.created_by && (
-          <span className="flex items-center gap-1 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-            <User size={10}/>{ev.created_by}
-          </span>
-        )}
-        <span className="text-xs bg-[#0d7377]/10 text-[#0d7377] px-2 py-0.5 rounded-full text-xs">☁ Importar</span>
-      </div>
-    </button>
+    </div>
   )
 }
 
-function RemoteEncCard({ enc, onOpen }: { enc: RemoteEnc; onOpen: () => Promise<void> }) {
-  const [loading, setLoading] = useState(false)
+function RemoteEncCard({
+  enc, onOpen, onDelete,
+}: {
+  enc: RemoteEnc
+  onOpen: () => Promise<void>
+  onDelete: () => Promise<void>
+}) {
+  const [loading,  setLoading]  = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
   async function handle() {
     setLoading(true)
     try { await onOpen() } catch (e) { console.error(e) } finally { setLoading(false) }
   }
+  async function handleDelete(e: React.MouseEvent) {
+    e.stopPropagation()
+    setDeleting(true)
+    try { await onDelete() } catch (err) { console.error(err) } finally { setDeleting(false) }
+  }
+
   return (
-    <button onClick={handle} disabled={loading}
-      className="w-full text-left bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 active:bg-gray-50 disabled:opacity-60">
-      <div className="flex items-center justify-between gap-2 mb-0.5">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 flex-shrink-0">PREDIAL</span>
-          <p className="font-semibold text-gray-800 truncate">{enc.nombre_propietario || '(Sin nombre)'}</p>
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <button onClick={handle} disabled={loading || deleting}
+        className="w-full text-left px-4 pt-4 pb-3 active:bg-gray-50 disabled:opacity-60">
+        <div className="flex items-center justify-between gap-2 mb-0.5">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 flex-shrink-0">PREDIAL</span>
+            <p className="font-semibold text-gray-800 truncate">{enc.nombre_propietario || '(Sin nombre)'}</p>
+          </div>
+          {loading
+            ? <Loader2 size={16} className="text-emerald-600 animate-spin flex-shrink-0"/>
+            : <Download size={16} className="text-gray-300 flex-shrink-0"/>}
         </div>
-        {loading
-          ? <Loader2 size={16} className="text-emerald-600 animate-spin flex-shrink-0"/>
-          : <Download size={16} className="text-gray-300 flex-shrink-0"/>}
+        <p className="text-xs text-gray-500 truncate">
+          {enc.municipio || '—'}{enc.vereda && ` · ${enc.vereda}`}
+        </p>
+      </button>
+      <div className="border-t border-gray-50 px-4 py-2 flex items-center justify-between">
+        <span className="text-xs text-gray-400 flex items-center gap-1">
+          {enc.created_by && <><User size={10}/>{enc.created_by}</>}
+        </span>
+        <button onClick={handleDelete} disabled={loading || deleting}
+          className="text-xs text-red-400 flex items-center gap-1 disabled:opacity-40">
+          {deleting ? <Loader2 size={11} className="animate-spin"/> : <Trash2 size={11}/>} Eliminar
+        </button>
       </div>
-      <p className="text-xs text-gray-500 truncate">
-        {enc.municipio || '—'}{enc.vereda && ` · ${enc.vereda}`}
-      </p>
-      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-        {enc.created_by && (
-          <span className="flex items-center gap-1 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-            <User size={10}/>{enc.created_by}
-          </span>
-        )}
-        <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">☁ Importar</span>
-      </div>
-    </button>
+    </div>
   )
 }
 
@@ -719,6 +767,76 @@ export function Home() {
     navigate(`/familia/${familiaLocalId}`)
   }
 
+  // ─── Eliminar familia remota (padre + hijos en Supabase + local) ─────────────
+  async function handleDeleteRemotePrediofamilia(predio: RemotePredio) {
+    const name = predio.nombre_predio || predio.nombre_propietario || 'sin nombre'
+    if (!window.confirm(`¿Eliminar la familia "${name}" y todos sus formularios?\n\nEsto borra los datos de la nube y no se puede deshacer.`)) return
+    try {
+      // Borrar formularios hijo vinculados por predio_id
+      await evalTable().delete().eq('predio_id', predio.id)
+      await encTable().delete().eq('predio_id', predio.id)
+      // Borrar el predio padre
+      await prediosTable().delete().eq('id', predio.id)
+      // Limpiar copia local si existe
+      const localFam = await db.familias.where('supabase_id').equals(predio.id).first()
+      if (localFam) {
+        const linkedEvals = await db.evaluaciones.where('familia_local_id').equals(localFam.local_id).toArray()
+        for (const e of linkedEvals) {
+          await db.photos.where('local_evaluacion_id').equals(e.local_id).delete()
+          await db.evaluaciones.delete(e.id!)
+        }
+        const linkedEncs = await db.encuestas.where('familia_local_id').equals(localFam.local_id).toArray()
+        for (const n of linkedEncs) await db.encuestas.delete(n.id!)
+        await db.familias.delete(localFam.id!)
+      }
+      await loadLocal()
+      await loadRemote()
+      setToast({ msg: `✓ Familia "${name}" eliminada`, isError: false })
+    } catch (err) {
+      setToast({ msg: `Error al eliminar: ${err instanceof Error ? err.message : String(err)}`, isError: true })
+    }
+    setTimeout(() => setToast(null), 5000)
+  }
+
+  // ─── Eliminar evaluación de campo remota ─────────────────────────────────────
+  async function handleDeleteRemoteEval(ev: RemoteEval) {
+    const name = ev.nombre_predio || 'sin nombre'
+    if (!window.confirm(`¿Eliminar el formulario de campo "${name}"?\n\nEsto borra el dato de la nube y no se puede deshacer.`)) return
+    try {
+      await evalTable().delete().eq('id', ev.id)
+      // Limpiar local si existe
+      const localEval = await db.evaluaciones.where('supabase_id').equals(ev.id).first()
+      if (localEval) {
+        await db.photos.where('local_evaluacion_id').equals(localEval.local_id).delete()
+        await db.evaluaciones.delete(localEval.id!)
+      }
+      await loadLocal()
+      await loadRemote()
+      setToast({ msg: `✓ Formulario de campo "${name}" eliminado`, isError: false })
+    } catch (err) {
+      setToast({ msg: `Error al eliminar: ${err instanceof Error ? err.message : String(err)}`, isError: true })
+    }
+    setTimeout(() => setToast(null), 5000)
+  }
+
+  // ─── Eliminar encuesta predial remota ────────────────────────────────────────
+  async function handleDeleteRemoteEnc(enc: RemoteEnc) {
+    const name = enc.nombre_propietario || 'sin nombre'
+    if (!window.confirm(`¿Eliminar la encuesta predial de "${name}"?\n\nEsto borra el dato de la nube y no se puede deshacer.`)) return
+    try {
+      await encTable().delete().eq('id', enc.id)
+      // Limpiar local si existe
+      const localEnc = await db.encuestas.where('supabase_id').equals(enc.id).first()
+      if (localEnc) await db.encuestas.delete(localEnc.id!)
+      await loadLocal()
+      await loadRemote()
+      setToast({ msg: `✓ Encuesta predial de "${name}" eliminada`, isError: false })
+    } catch (err) {
+      setToast({ msg: `Error al eliminar: ${err instanceof Error ? err.message : String(err)}`, isError: true })
+    }
+    setTimeout(() => setToast(null), 5000)
+  }
+
   // ─── Índices de hijos por familia ────────────────────────────────────────────
   const evalsByFamilia: Record<string, EvaluacionRecord> = {}
   for (const e of evals) {
@@ -890,6 +1008,7 @@ export function Home() {
                         linkedEval={linkedEval}
                         linkedEnc={linkedEnc}
                         onOpen={() => handleOpenRemotePrediofamilia(p)}
+                        onDelete={() => handleDeleteRemotePrediofamilia(p)}
                       />
                     )
                   })}
@@ -914,11 +1033,13 @@ export function Home() {
                           key={`re-${item.data.id}`}
                           ev={item.data}
                           onOpen={() => handleOpenRemoteEval(item.data)}
+                          onDelete={() => handleDeleteRemoteEval(item.data)}
                         />
                       : <RemoteEncCard
                           key={`rn-${item.data.id}`}
                           enc={item.data}
                           onOpen={() => handleOpenRemoteEnc(item.data)}
+                          onDelete={() => handleDeleteRemoteEnc(item.data)}
                         />
                   )}
                 </>
