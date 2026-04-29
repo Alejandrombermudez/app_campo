@@ -773,10 +773,17 @@ export function Home() {
     if (!window.confirm(`¿Eliminar la familia "${name}" y todos sus formularios?\n\nEsto borra los datos de la nube y no se puede deshacer.`)) return
     try {
       // Borrar formularios hijo vinculados por predio_id
+      // (pueden ser 0 filas legítimamente, no verificamos count)
       await evalTable().delete().eq('predio_id', predio.id)
       await encTable().delete().eq('predio_id', predio.id)
-      // Borrar el predio padre
-      await prediosTable().delete().eq('id', predio.id)
+      // Borrar el predio padre — .select('id') hace que RLS bloqueo sea detectable
+      // (sin .select, Supabase retorna { error: null } aunque no borre nada)
+      const { data: deletedPredio, error: predioErr } = await prediosTable()
+        .delete().eq('id', predio.id).select('id')
+      if (predioErr) throw new Error(predioErr.message || JSON.stringify(predioErr))
+      if (!deletedPredio || deletedPredio.length === 0) {
+        throw new Error('RLS bloqueó el borrado. Agrega la política DELETE en Supabase → SQL Editor (ver consola).')
+      }
       // Limpiar copia local si existe
       const localFam = await db.familias.where('supabase_id').equals(predio.id).first()
       if (localFam) {
@@ -803,7 +810,12 @@ export function Home() {
     const name = ev.nombre_predio || 'sin nombre'
     if (!window.confirm(`¿Eliminar el formulario de campo "${name}"?\n\nEsto borra el dato de la nube y no se puede deshacer.`)) return
     try {
-      await evalTable().delete().eq('id', ev.id)
+      const { data: deleted, error: delErr } = await evalTable()
+        .delete().eq('id', ev.id).select('id')
+      if (delErr) throw new Error(delErr.message || JSON.stringify(delErr))
+      if (!deleted || deleted.length === 0) {
+        throw new Error('RLS bloqueó el borrado. Agrega la política DELETE en Supabase → SQL Editor.')
+      }
       // Limpiar local si existe
       const localEval = await db.evaluaciones.where('supabase_id').equals(ev.id).first()
       if (localEval) {
@@ -824,7 +836,12 @@ export function Home() {
     const name = enc.nombre_propietario || 'sin nombre'
     if (!window.confirm(`¿Eliminar la encuesta predial de "${name}"?\n\nEsto borra el dato de la nube y no se puede deshacer.`)) return
     try {
-      await encTable().delete().eq('id', enc.id)
+      const { data: deleted, error: delErr } = await encTable()
+        .delete().eq('id', enc.id).select('id')
+      if (delErr) throw new Error(delErr.message || JSON.stringify(delErr))
+      if (!deleted || deleted.length === 0) {
+        throw new Error('RLS bloqueó el borrado. Agrega la política DELETE en Supabase → SQL Editor.')
+      }
       // Limpiar local si existe
       const localEnc = await db.encuestas.where('supabase_id').equals(enc.id).first()
       if (localEnc) await db.encuestas.delete(localEnc.id!)
