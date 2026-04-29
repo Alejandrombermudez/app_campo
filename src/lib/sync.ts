@@ -281,7 +281,14 @@ export async function syncPendingEvaluaciones(): Promise<{ synced: number; error
         updated_at:     new Date().toISOString(),
       }
 
-      const { data, error } = await evalTable().upsert(payload, { onConflict: 'local_id' }).select('id').single()
+      // Si el registro fue importado (supabase_id conocido) → actualizar por ID remoto.
+      // Si es nuevo (creado en este dispositivo) → insertar vía upsert por local_id.
+      // Esto evita crear registros duplicados cuando dos personas sincronizan el mismo predio.
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { local_id: _lid, ...updatePayload } = payload
+      const { data, error } = ev.supabase_id
+        ? await evalTable().update(updatePayload).eq('id', ev.supabase_id).select('id').single()
+        : await evalTable().upsert(payload, { onConflict: 'local_id' }).select('id').single()
       if (error) {
         // Construir mensaje legible desde el objeto de error de Supabase
         const supMsg = [error.message, error.details, error.hint, error.code]
@@ -392,10 +399,13 @@ export async function syncPendingEncuestas(): Promise<{ synced: number; errors: 
         updated_at:         new Date().toISOString(),
       }
 
-      const { data, error } = await encTable()
-        .upsert(payload, { onConflict: 'local_id' })
-        .select('id')
-        .single()
+      // Si fue importado → actualizar el registro remoto por ID (no crear duplicado).
+      // Si es nuevo → insertar vía upsert por local_id.
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { local_id: _lid, ...updatePayload } = payload
+      const { data, error } = enc.supabase_id
+        ? await encTable().update(updatePayload).eq('id', enc.supabase_id).select('id').single()
+        : await encTable().upsert(payload, { onConflict: 'local_id' }).select('id').single()
 
       if (error) {
         const supMsg = [error.message, error.details, error.hint, error.code]

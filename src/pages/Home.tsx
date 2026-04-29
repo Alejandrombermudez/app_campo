@@ -627,8 +627,13 @@ export function Home() {
 
     // 2. Importar evaluación de campo vinculada (crea si falta; actualiza step_completed si mejoró)
     try {
-      const { data: evalData } = await evalTable()
-        .select('*').eq('predio_id', predio.id).maybeSingle()
+      // Usar limit(1) en vez de maybeSingle() para que no falle cuando hay
+      // registros duplicados (dos personas sincronizaron antes del fix).
+      // Ordenar por step_completed desc para obtener el más completo.
+      const { data: _evalList } = await evalTable()
+        .select('*').eq('predio_id', predio.id)
+        .order('step_completed', { ascending: false, nullsFirst: false }).limit(1)
+      const evalData = _evalList?.[0] ?? null
       if (evalData) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const d = evalData as any
@@ -668,8 +673,10 @@ export function Home() {
 
     // 3. Importar encuesta predial vinculada (misma lógica)
     try {
-      const { data: encData } = await encTable()
-        .select('*').eq('predio_id', predio.id).maybeSingle()
+      const { data: _encList } = await encTable()
+        .select('*').eq('predio_id', predio.id)
+        .order('step_completed', { ascending: false, nullsFirst: false }).limit(1)
+      const encData = _encList?.[0] ?? null
       if (encData) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const d = encData as any
@@ -869,8 +876,13 @@ export function Home() {
                 <>
                   <p className="text-xs text-gray-400 px-1">{remotePredios.length} familia(s) en la nube · toca para importar</p>
                   {remotePredios.map(p => {
-                    const linkedEval = remoteEvals.find(e => e.predio_id === p.id) ?? null
-                    const linkedEnc  = remoteEncs.find(e  => e.predio_id === p.id) ?? null
+                    // Elegir la versión más completa (mayor step_completed) cuando hay duplicados
+                    const linkedEval = remoteEvals
+                      .filter(e => e.predio_id === p.id)
+                      .sort((a, b) => (b.step_completed ?? 0) - (a.step_completed ?? 0))[0] ?? null
+                    const linkedEnc  = remoteEncs
+                      .filter(e => e.predio_id === p.id)
+                      .sort((a, b) => (b.step_completed ?? 0) - (a.step_completed ?? 0))[0] ?? null
                     return (
                       <RemotePredioCard
                         key={p.id}
