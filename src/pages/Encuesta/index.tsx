@@ -41,7 +41,7 @@ function newEncuesta(): EncuestaPredialRecord {
     municipio:          '',
     vereda:             '',
     fecha_encuesta:     '',
-    sec_general:        { departamento: 'Caquetá' },
+    sec_general:        {},
     sec_vivienda:       {},
     sec_familia:        {},
     sec_economia:       {},
@@ -73,15 +73,13 @@ export function EncuestaPage() {
   const total = STEPS.length
   const step  = STEPS[stepIdx]
 
-  // Sincronizar resumen con sec_general
+  // sec_general ya no trae identidad/ubicación (viene de la familia/core);
+  // solo se sincroniza fecha_encuesta para el resumen de listado.
   function handleGeneralChange(g: typeof ev.sec_general) {
     setEv(p => ({
       ...p,
-      sec_general:        { ...p.sec_general, ...g },
-      nombre_propietario: g.nombre_propietario ?? p.nombre_propietario,
-      municipio:          g.municipio          ?? p.municipio,
-      vereda:             g.vereda             ?? p.vereda,
-      fecha_encuesta:     g.fecha_encuesta     ?? p.fecha_encuesta,
+      sec_general:    { ...p.sec_general, ...g },
+      fecha_encuesta: g.fecha_encuesta ?? p.fecha_encuesta,
     }))
   }
 

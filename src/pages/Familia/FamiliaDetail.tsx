@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ClipboardList, BarChart2, ChevronRight, CheckCircle, Clock, AlertCircle, Loader2, Pencil } from 'lucide-react'
+import { ArrowLeft, ClipboardList, BarChart2, ChevronRight, CheckCircle, Clock, AlertCircle, Loader2, Pencil, Satellite } from 'lucide-react'
 import { db } from '../../db/schema'
 import type { FamiliaRecord } from '../../types/familia'
 import type { EvaluacionRecord, ZonaData } from '../../types/evaluacion'
 import type { EncuestaPredialRecord, CultivoRow } from '../../types/encuesta'
+import type { RevisionRecord } from '../../types/revision'
+import { zonasActivas } from '../../lib/geo'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const CULTIVOS_BASE = ['Café', 'Cacao', 'Caña de azúcar', 'Plátano', 'Yuca', 'Frutales', 'Madera']
@@ -43,6 +45,7 @@ export function FamiliaDetail() {
   const [familia,    setFamilia]    = useState<FamiliaRecord | null>(null)
   const [campoEval,  setCampoEval]  = useState<EvaluacionRecord | undefined>(undefined)
   const [predialEnc, setPredialEnc] = useState<EncuestaPredialRecord | undefined>(undefined)
+  const [revisiones, setRevisiones] = useState<RevisionRecord[]>([])
   const [loaded,     setLoaded]     = useState(false)
   const [creating,   setCreating]   = useState(false)
 
@@ -52,26 +55,35 @@ export function FamiliaDetail() {
       db.familias.where('local_id').equals(id).first(),
       db.evaluaciones.where('familia_local_id').equals(id).first(),
       db.encuestas.where('familia_local_id').equals(id).first(),
-    ]).then(([f, e, n]) => {
+      db.revisiones.where('familia_local_id').equals(id).toArray(),
+    ]).then(([f, e, n, r]) => {
       setFamilia(f ?? null)
       setCampoEval(e)
       setPredialEnc(n)
+      setRevisiones(r)
       setLoaded(true)
     })
   }, [id])
 
+  // Zonas que se evaluarán en terreno: las del SIG + correcciones locales
+  // (módulo SIG), sin las descartadas.
+  const activas = familia ? zonasActivas(familia, revisiones) : []
+
   // ─── Abrir / crear evaluación de campo ──────────────────────────────────────
+  // SIG I es obligatorio: las zonas NO se inventan, son las que el SIG ya
+  // dibujó (geo.zonas), con las correcciones que campo haya hecho encima.
+  // Si por algún motivo la familia quedó sin zonas activas, se bloquea.
   async function openCampo() {
-    if (!familia || creating) return
+    if (!familia || creating || activas.length === 0) return
     setCreating(true)
     try {
       const existing = await db.evaluaciones
         .where('familia_local_id').equals(familia.local_id).first()
       if (existing) { navigate(`/evaluacion/${existing.local_id}`); return }
 
-      const numZonas = familia.num_zonas
-      const zonas: ZonaData[] = Array.from({ length: numZonas }, (_, i) => ({
-        zona_numero: i + 1, cobertura: {}, suelo: {}, logistica: {},
+      const zonas: ZonaData[] = activas.map((z, i) => ({
+        zona_id: z.zona_id, zona_numero: i + 1, area_ha_sig: z.area_ha,
+        cobertura: {}, suelo: {}, logistica: {},
       }))
 
       const newEval: EvaluacionRecord = {
@@ -88,17 +100,11 @@ export function FamiliaDetail() {
         codigo_predio:    '',
         municipio:        familia.municipio,
         fecha_visita:     familia.fecha,
-        num_zonas:        numZonas,
+        num_zonas:        zonas.length,
         seccion_1: {
-          codigo_formato:       'AE-CAMPO-001',
-          version:              '1.0',
-          nombre_predio:        familia.nombre_predio,
-          municipio:            familia.municipio,
-          vereda:               familia.vereda,
-          fecha_visita:         familia.fecha,
-          propietario_tenedor:  familia.nombre_propietario,
-          contacto_propietario: familia.contacto,
-          num_zonas:            numZonas,
+          codigo_formato: 'AE-CAMPO-001',
+          version:        '1.0',
+          fecha_visita:   familia.fecha,
         },
         seccion_2: {},
         zonas,
@@ -132,18 +138,14 @@ export function FamiliaDetail() {
         updated_at:         new Date().toISOString(),
         step_completed:     0,
         created_by:         localStorage.getItem('ae_campo_user') ?? '',
+        // Snapshot para listado — identidad real ya vive en familia (core), esto
+        // solo evita una consulta extra al armar las tarjetas de Home.
         nombre_propietario: familia.nombre_propietario,
         municipio:          familia.municipio,
         vereda:             familia.vereda,
         fecha_encuesta:     familia.fecha,
         sec_general: {
-          nombre_finca:       familia.nombre_predio,
-          municipio:          familia.municipio,
-          vereda:             familia.vereda,
-          fecha_encuesta:     familia.fecha,
-          nombre_propietario: familia.nombre_propietario,
-          contacto:           familia.contacto,
-          departamento:       familia.departamento,
+          fecha_encuesta: familia.fecha,
         },
         sec_vivienda:  {},
         sec_familia:   {},
@@ -232,10 +234,32 @@ export function FamiliaDetail() {
         {/* Formularios hijos */}
         <p className="text-xs font-bold uppercase tracking-widest text-gray-400 px-1">Formularios</p>
 
+        {/* Módulo SIG — mapa, geolocalización y corrección de zonas */}
+        <button
+          onClick={() => navigate(`/sig/${familia.local_id}`)}
+          className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 flex items-center gap-3 active:bg-gray-50"
+        >
+          <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center flex-shrink-0">
+            <Satellite size={20} className="text-teal-600" />
+          </div>
+          <div className="flex-1 text-left min-w-0">
+            <p className="text-sm font-semibold text-gray-800">Módulo SIG</p>
+            <p className="text-xs text-gray-500 mb-1">
+              Mapa satelital · GPS a las zonas · corregir límites
+            </p>
+            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 font-medium">
+              {activas.length} zona{activas.length !== 1 ? 's' : ''} de siembra
+              {revisiones.filter(r => r.sync_status !== 'synced').length > 0 &&
+                ` · ${revisiones.filter(r => r.sync_status !== 'synced').length} cambio(s) por sincronizar`}
+            </span>
+          </div>
+          <ChevronRight size={18} className="text-gray-300 flex-shrink-0" />
+        </button>
+
         {/* Evaluación de Campo */}
         <button
           onClick={openCampo}
-          disabled={creating}
+          disabled={creating || activas.length === 0}
           className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 flex items-center gap-3 active:bg-gray-50 disabled:opacity-60"
         >
           <div className="w-10 h-10 rounded-xl bg-[#0d7377]/10 flex items-center justify-center flex-shrink-0">
@@ -246,7 +270,9 @@ export function FamiliaDetail() {
           <div className="flex-1 text-left min-w-0">
             <p className="text-sm font-semibold text-gray-800">Evaluación de Campo</p>
             <p className="text-xs text-gray-500 mb-1">
-              AE-CAMPO-001 · {familia.num_zonas} zona{familia.num_zonas > 1 ? 's' : ''}
+              {activas.length === 0
+                ? 'Sin zonas activas — revisa el módulo SIG'
+                : `AE-CAMPO-001 · ${activas.length} zona${activas.length > 1 ? 's' : ''}`}
             </p>
             <StatusBadge status={campoStatus} />
           </div>

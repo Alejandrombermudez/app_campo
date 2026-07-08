@@ -24,25 +24,24 @@ interface StepDescriptor {
   zona?: number
 }
 
-function buildSteps(numZonas: number): StepDescriptor[] {
+function buildSteps(zonas: ZonaData[]): StepDescriptor[] {
   const steps: StepDescriptor[] = [
     { id: 'identificacion', label: '§1 Identificación' },
     { id: 'cartografia',    label: '§2 Cartografía Social' },
   ]
-  for (let z = 1; z <= Math.max(1, numZonas); z++) {
+  zonas.forEach((_, i) => {
+    const z = i + 1
     steps.push({ id: `cobertura_z${z}`, label: `§3 Cobertura — Zona ${z}`, zona: z })
     steps.push({ id: `suelo_z${z}`,     label: `§4 Suelo — Zona ${z}`,     zona: z })
     steps.push({ id: `logistica_z${z}`, label: `§5 Logística — Zona ${z}`, zona: z })
-  }
+  })
   steps.push({ id: 'riesgos', label: '§6 Riesgos' })
   steps.push({ id: 'firmas',  label: 'Firmas' })
   return steps
 }
 
-function emptyZona(n: number): ZonaData {
-  return { zona_numero: n, cobertura: {}, suelo: {}, logistica: {} }
-}
-
+// Entrada legacy sin familia (ruta /evaluacion/nueva): no hay predio de SIG
+// que traer, se deja una zona placeholder (zona_id null).
 function newEvaluacion(): EvaluacionRecord {
   return {
     local_id:       crypto.randomUUID(),
@@ -58,9 +57,9 @@ function newEvaluacion(): EvaluacionRecord {
     municipio:      '',
     fecha_visita:   '',
     num_zonas:      1,
-    seccion_1:      { codigo_formato: 'AE-CAMPO-001', version: '1.0', num_zonas: 1 },
+    seccion_1:      { codigo_formato: 'AE-CAMPO-001', version: '1.0' },
     seccion_2:      {},
-    zonas:          [emptyZona(1)],
+    zonas:          [{ zona_id: null, zona_numero: 1, area_ha_sig: null, cobertura: {}, suelo: {}, logistica: {} }],
     seccion_6:      {},
     seccion_7:      {},
   }
@@ -89,46 +88,15 @@ export function EvaluacionPage() {
     })
   }, [id])
 
-  const numZonas = ev.seccion_1.num_zonas ?? 1
-  const steps    = buildSteps(numZonas)
-  const total    = steps.length
-  const step     = steps[stepIdx]
+  const steps = buildSteps(ev.zonas)
+  const total = steps.length
+  const step  = steps[stepIdx]
 
-  // ─── Actualizar sección 1 y sincronizar zonas ─────────────────────────────
+  // ─── Actualizar sección 1 ──────────────────────────────────────────────────
+  // Las zonas ya no se agregan/quitan aquí: las trajo el SIG al crear la
+  // evaluación (ver FamiliaDetail.openCampo). §1 solo guarda metadatos de visita.
   function handleS1Change(s1: Partial<SeccionIdentificacion>) {
-    const newNumZonas = s1.num_zonas ?? numZonas
-    let zonas = ev.zonas
-
-    if (newNumZonas > zonas.length) {
-      // Agregar zonas vacías
-      zonas = [
-        ...zonas,
-        ...Array.from({ length: newNumZonas - zonas.length }, (_, i) => emptyZona(zonas.length + i + 1)),
-      ]
-    } else if (newNumZonas < zonas.length) {
-      // Confirmar si hay datos en las zonas a eliminar
-      const toRemove = zonas.slice(newNumZonas)
-      const hasData  = toRemove.some(z =>
-        Object.keys(z.cobertura).length > 0 ||
-        Object.keys(z.suelo).length > 0 ||
-        Object.keys(z.logistica).length > 0
-      )
-      if (hasData && !window.confirm(`¿Eliminar datos de las zonas ${newNumZonas + 1}–${zonas.length}?`)) {
-        return
-      }
-      zonas = zonas.slice(0, newNumZonas)
-    }
-
-    setEv(prev => ({
-      ...prev,
-      seccion_1:    { ...prev.seccion_1, ...s1 },
-      zonas,
-      num_zonas:    newNumZonas,
-      nombre_predio: s1.nombre_predio ?? prev.nombre_predio,
-      codigo_predio: s1.codigo_predio ?? prev.codigo_predio,
-      municipio:     s1.municipio    ?? prev.municipio,
-      fecha_visita:  s1.fecha_visita ?? prev.fecha_visita,
-    }))
+    setEv(prev => ({ ...prev, seccion_1: { ...prev.seccion_1, ...s1 } }))
   }
 
   // ─── Guardar paso y avanzar ───────────────────────────────────────────────
@@ -208,7 +176,8 @@ export function EvaluacionPage() {
   )
 
   const zona      = step.zona ?? 1
-  const zonaData  = ev.zonas.find(z => z.zona_numero === zona) ?? emptyZona(zona)
+  const zonaData  = ev.zonas.find(z => z.zona_numero === zona)
+    ?? { zona_id: null, zona_numero: zona, area_ha_sig: null, cobertura: {}, suelo: {}, logistica: {} }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#f0fafa]">

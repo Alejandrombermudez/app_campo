@@ -23,6 +23,9 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
+// Nombre/propietario/contacto/ubicación/coordenadas NO se preguntan aquí:
+// ya vienen de Jurídica+SIG (ver ficha de la familia, botón "Editar" en su
+// detalle). Esta sección solo guarda lo que se sabe preguntando en terreno.
 export function EStep01({ data, onChange }: Props) {
   const s = (k: keyof EncuestaGeneral, v: unknown) => onChange({ ...data, [k]: v })
   return (
@@ -44,32 +47,9 @@ export function EStep01({ data, onChange }: Props) {
         <Field label="Tipo de encuestado">
           <RadioGrp opts={['Propietario','Arrendatario','Mayordomo','Trabajador']} val={data.tipo_encuestado ?? ''} onChange={v => s('tipo_encuestado', v)} cols={2} />
         </Field>
-        <Field label="Nombre del respondiente">
-          <input type="text" value={data.nombre_propietario ?? ''} onChange={e => s('nombre_propietario', e.target.value)} />
-        </Field>
-        <Field label="Contacto">
-          <input type="tel" placeholder="Teléfono / WhatsApp" value={data.contacto ?? ''} onChange={e => s('contacto', e.target.value)} />
-        </Field>
       </Section>
 
       <h2 className="text-base font-semibold text-[#0d7377]">§2 Datos del Predio</h2>
-
-      <Section title="Ubicación">
-        <Field label="Nombre de la finca">
-          <input type="text" value={data.nombre_finca ?? ''} onChange={e => s('nombre_finca', e.target.value)} />
-        </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Departamento">
-            <input type="text" value="Caquetá" readOnly className="bg-gray-50 text-gray-400" />
-          </Field>
-          <Field label="Municipio">
-            <input type="text" value={data.municipio ?? ''} onChange={e => s('municipio', e.target.value)} />
-          </Field>
-        </div>
-        <Field label="Vereda">
-          <input type="text" value={data.vereda ?? ''} onChange={e => s('vereda', e.target.value)} />
-        </Field>
-      </Section>
 
       <Section title="Estrato del paisaje">
         <RadioGrp
@@ -78,15 +58,7 @@ export function EStep01({ data, onChange }: Props) {
         />
       </Section>
 
-      <Section title="Coordenadas y altitud">
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Latitud N">
-            <input type="text" placeholder="ej: 1.234567" value={data.latitud ?? ''} onChange={e => s('latitud', e.target.value)} />
-          </Field>
-          <Field label="Longitud W">
-            <input type="text" placeholder="ej: -75.234567" value={data.longitud ?? ''} onChange={e => s('longitud', e.target.value)} />
-          </Field>
-        </div>
+      <Section title="Altitud y antigüedad">
         <div className="grid grid-cols-2 gap-3">
           <Field label="Altitud (msnm)">
             <input type="number" value={data.altitud_msnm ?? ''} onChange={e => s('altitud_msnm', e.target.value ? +e.target.value : null)} />

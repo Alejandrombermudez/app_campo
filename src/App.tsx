@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Home } from './pages/Home'
 import { EvaluacionPage } from './pages/Evaluacion'
@@ -10,11 +10,14 @@ import { CampoViewer } from './pages/Ver/CampoViewer'
 import { PredialViewer } from './pages/Ver/PredialViewer'
 import { useOnlineStatus } from './lib/useOnlineStatus'
 import {
-  syncPendingFamilias,
+  syncPendingRevisiones,
   syncPendingEvaluaciones,
   syncPendingEncuestas,
   syncPendingPredios,
 } from './lib/sync'
+
+// Leaflet + geoman pesan; solo se cargan al entrar al módulo SIG
+const SigPage = lazy(() => import('./pages/Sig').then(m => ({ default: m.SigPage })))
 
 function SyncTrigger() {
   const online  = useOnlineStatus()
@@ -23,8 +26,8 @@ function SyncTrigger() {
   useEffect(() => {
     if (online && !prevRef.current) {
       const timer = setTimeout(async () => {
-        // Familias primero (hijos necesitan el predio_id del padre)
-        await syncPendingFamilias()
+        // Revisiones primero: corrigen geo.zonas, de las que depende lo demás
+        await syncPendingRevisiones()
         syncPendingEvaluaciones()
         syncPendingEncuestas()
         syncPendingPredios()
@@ -47,6 +50,16 @@ export default function App() {
         <Route path="/familia/nueva"        element={<FamiliaPage />} />
         <Route path="/familia/:id/editar"   element={<FamiliaPage />} />
         <Route path="/familia/:id"          element={<FamiliaDetail />} />
+        {/* Módulo SIG: mapa + GPS + corrección de zonas (SIG II) */}
+        <Route path="/sig/:id" element={
+          <Suspense fallback={
+            <div className="min-h-screen flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0d7377]" />
+            </div>
+          }>
+            <SigPage />
+          </Suspense>
+        } />
         {/* Formulario unificado legacy */}
         <Route path="/predio/nueva"     element={<PredioPage />} />
         <Route path="/predio/:id"       element={<PredioPage />} />

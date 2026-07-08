@@ -5,14 +5,10 @@ const key  = import.meta.env.VITE_SUPABASE_ANON_KEY as string
 
 export const supabase = createClient(url, key)
 
-/** Tabla evaluaciones_campo en schema siembra */
+/** Tabla evaluaciones_campo en schema siembra (predio_id → core.predios) */
 export const evalTable = () =>
   supabase.schema('siembra').from('evaluaciones_campo')
 
-/** Tabla familias (encuestas prediales) en schema siembra */
+/** Tabla familias (encuestas prediales) en schema siembra (predio_id → core.predios) */
 export const encTable = () =>
   supabase.schema('siembra').from('familias')
-
-/** Tabla predios (familias padre) en schema siembra */
-export const prediosTable = () =>
-  supabase.schema('siembra').from('predios')

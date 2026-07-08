@@ -1,20 +1,17 @@
 // ─── §1 Datos Generales + §2 Datos del Predio ────────────────────────────────
+// nombre_propietario/contacto/nombre_finca/departamento/municipio/vereda/
+// latitud/longitud NO están aquí: ya vienen de Jurídica+SIG (core.predios/
+// core.aliados/geo.zonas) y se muestran de solo lectura desde FamiliaRecord —
+// ver ARQUITECTURA_DATOS.md §3.3. Esta sección solo guarda lo que se sabe
+// preguntando en terreno.
 export interface EncuestaGeneral {
   encuesta_no: string
   fecha_encuesta: string
   encuestador: string
   tipo_encuestado: string          // Propietario/Arrendatario/Mayordomo/Trabajador
-  nombre_propietario: string
-  contacto: string
-  nombre_finca: string
-  departamento: string             // Caquetá (fijo)
-  municipio: string
-  vereda: string
   estrato_paisaje: string          // Sabana/Vega/Tierra firme alta/media/baja
-  latitud: string
-  longitud: string
   altitud_msnm: number | null
-  anio_adquisicion: number | null
+  anio_adquisicion: number | null  // se mantiene en Campo: Jurídica aún no lo captura estructurado
   distancia_cabecera_km: number | null
   tipo_via: string[]               // multi
   tipo_acceso_predio: string[]     // multi

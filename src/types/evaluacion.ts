@@ -1,20 +1,18 @@
+import type { ZonaSig } from './core'
+
 // ─── §1 Identificación ───────────────────────────────────────────────────────
+// nombre_predio/municipio/vereda/propietario_tenedor/contacto_propietario ya
+// están en FamiliaRecord (snapshot de core, solo lectura). num_zonas/
+// area_zonas_ha ya no se teclean: salen de ZonaData[] (geo.zonas, ver abajo).
 export interface SeccionIdentificacion {
   codigo_formato: string        // AE-CAMPO-001
-  version: string               // 1.0
-  fecha_visita: string          // ISO date
+  version: string                // 1.0
+  fecha_visita: string           // ISO date
   evaluador_1: string
   evaluador_2: string
   codigo_predio: string
-  nombre_predio: string
-  municipio: string
-  vereda: string                // Vereda del predio
-  propietario_tenedor: string   // Propietario o tenedor del predio
-  contacto_propietario: string  // Teléfono / contacto
-  num_zonas: number             // CLAVE: controla repetición §3 §4 §5
   senal_celular: boolean
   operador_celular: string
-  area_zonas_ha: number | null
   tiempo_desde_via: string
 }
 
@@ -90,11 +88,26 @@ export interface SeccionFirmas {
 }
 
 // ─── Zona completa ────────────────────────────────────────────────────────────
+// La zona NO la crea el encuestador: la dibujó el SIG (geo.zonas). Campo la
+// confirma/describe (SIG II) — zona_id es la identidad real; zona_numero solo
+// ordena la vista ("Zona 1", "Zona 2"...).
 export interface ZonaData {
-  zona_numero: number
+  zona_id:      string | null   // FK → geo.zonas.id (null solo en registros legacy pre-rediseño)
+  zona_numero:  number
+  area_ha_sig:  number | null   // de solo lectura, calculada por PostGIS en el SIG
   cobertura: Partial<SeccionCobertura>
   suelo: Partial<SeccionSuelo>
   logistica: Partial<SeccionLogistica>
+}
+
+/** Construye una zona de evaluación a partir de una zona real del SIG. */
+export function zonaDesdeSig(z: ZonaSig, numero: number): ZonaData {
+  return {
+    zona_id:     z.zona_id,
+    zona_numero: numero,
+    area_ha_sig: z.area_ha,
+    cobertura: {}, suelo: {}, logistica: {},
+  }
 }
 
 // ─── Registro principal en IndexedDB ─────────────────────────────────────────

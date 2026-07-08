@@ -81,7 +81,7 @@ const emptyCultivo = (nombre = ''): CultivoRow => ({
 })
 
 export function emptyZona(n: number): ZonaData {
-  return { zona_numero: n, cobertura: {}, suelo: {}, logistica: {} }
+  return { zona_id: null, zona_numero: n, area_ha_sig: null, cobertura: {}, suelo: {}, logistica: {} }
 }
 
 export function newPredio(): PredioRecord {

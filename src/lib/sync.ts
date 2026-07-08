@@ -5,7 +5,6 @@ import type { CultivoRow, EncuestaPredialRecord } from '../types/encuesta'
 
 function encTable()     { return supabase.schema('siembra').from('familias') }
 function predioTable()  { return supabase.schema('siembra').from('evaluaciones_campo') }
-function familiaTable() { return supabase.schema('siembra').from('predios') }
 
 // ─── Helpers de merge colaborativo ────────────────────────────────────────────
 
@@ -23,10 +22,13 @@ function mergeJsonb(
   return result
 }
 
-/** Mergea zonas por zona_numero */
+/** Identidad de una zona: zona_id (geo.zonas real) o, en registros legacy sin zona_id, zona_numero */
+function zonaKey(z: ZonaData): string { return z.zona_id ?? `n${z.zona_numero}` }
+
+/** Mergea zonas por zona_id (identidad real del SIG; zona_numero solo ordena) */
 function mergeZonas(remote: ZonaData[], local: ZonaData[]): ZonaData[] {
   const result = remote.map(rz => {
-    const lz = local.find(z => z.zona_numero === rz.zona_numero)
+    const lz = local.find(z => zonaKey(z) === zonaKey(rz))
     if (!lz) return rz
     return {
       ...rz,
@@ -46,7 +48,7 @@ function mergeZonas(remote: ZonaData[], local: ZonaData[]): ZonaData[] {
   })
   // Zonas locales que no existen aún en remote
   for (const lz of local) {
-    if (!result.find(z => z.zona_numero === lz.zona_numero)) result.push(lz)
+    if (!result.find(z => zonaKey(z) === zonaKey(lz))) result.push(lz)
   }
   return result
 }
@@ -106,58 +108,72 @@ async function uploadSignature(dataURL: string, localId: string, role: string): 
   return data.publicUrl
 }
 
-// ─── Sincronizar familias/predios padre → siembra.predios ────────────────────
-export async function syncPendingFamilias(): Promise<{ synced: number; errors: number }> {
+// ─── Sincronizar revisiones de zonas (SIG II) → RPC geo.revisar_zona ─────────
+// Idempotente: el RPC ignora local_id repetidos, así que reintentar es seguro.
+export async function syncPendingRevisiones(): Promise<{ synced: number; errors: number }> {
   if (!navigator.onLine) return { synced: 0, errors: 0 }
 
-  const pending = await db.familias
+  const pending = await db.revisiones
     .where('sync_status').anyOf(['pending', 'error'])
     .toArray()
 
   let synced = 0, errors = 0
+  const familiasTocadas = new Set<string>()
 
-  for (const familia of pending) {
+  for (const rev of pending.sort((a, b) => a.created_at.localeCompare(b.created_at))) {
     try {
-      const payload = {
-        local_id:           familia.local_id,
-        nombre_predio:      familia.nombre_predio      || null,
-        nombre_propietario: familia.nombre_propietario || null,
-        municipio:          familia.municipio          || null,
-        vereda:             familia.vereda             || null,
-        fecha:              familia.fecha              || null,
-        contacto:           familia.contacto           || null,
-        departamento:       familia.departamento       || 'Caquetá',
-        num_zonas:          familia.num_zonas,
-        created_by:         familia.created_by         || null,
-        sync_origin:        'pwa',
-        updated_at:         new Date().toISOString(),
-      }
-
-      const { data, error } = await familiaTable()
-        .upsert(payload, { onConflict: 'local_id' })
-        .select('id')
-        .single()
-
+      const { data: zonaId, error } = await supabase.schema('geo').rpc('revisar_zona', {
+        p_local_id:      rev.local_id,
+        p_predio_id:     rev.predio_core_id,
+        p_accion:        rev.accion,
+        p_zona_id:       rev.zona_id,
+        p_geojson:       rev.geojson,
+        p_observaciones: rev.observaciones || null,
+        p_evaluador:     rev.created_by || null,
+        p_metodo:        rev.metodo,
+        p_fecha:         rev.fecha || null,
+      })
       if (error) {
         const supMsg = [error.message, error.details, error.hint, error.code]
           .filter(Boolean).join(' | ')
         throw new Error(supMsg || JSON.stringify(error))
       }
 
-      await db.familias.update(familia.id!, {
+      await db.revisiones.update(rev.id!, {
         sync_status: 'synced',
         sync_error:  null,
-        supabase_id: data?.id ?? null,
+        zona_id:     rev.zona_id ?? (zonaId as string | null),
         updated_at:  new Date().toISOString(),
       })
+      familiasTocadas.add(rev.familia_local_id)
       synced++
     } catch (err: unknown) {
       const msg = err instanceof Error
         ? err.message
         : (typeof err === 'object' ? JSON.stringify(err) : String(err))
-      console.error('[sync familia] error:', msg)
-      await db.familias.update(familia.id!, { sync_status: 'error', sync_error: msg })
+      console.error('[sync revision] error:', msg)
+      await db.revisiones.update(rev.id!, { sync_status: 'error', sync_error: msg })
       errors++
+    }
+  }
+
+  // Refrescar el snapshot de zonas de las familias afectadas: geo.zonas ya
+  // tiene la versión corregida, así el estado local vuelve a ser espejo del
+  // servidor y las revisiones aplicadas dejan de "sumar" sobre el snapshot.
+  for (const familiaLocalId of familiasTocadas) {
+    try {
+      const familia = await db.familias.where('local_id').equals(familiaLocalId).first()
+      if (!familia?.predio_core_id) continue
+      const { fetchZonasPredio } = await import('./core')
+      const { siembra, finca } = await fetchZonasPredio(familia.predio_core_id)
+      await db.familias.update(familia.id!, {
+        zonas_sig:   siembra,
+        zonas_finca: finca,
+        num_zonas:   siembra.length,
+        updated_at:  new Date().toISOString(),
+      })
+    } catch (err) {
+      console.error('[sync revision] refresh zonas error:', err)
     }
   }
 
@@ -252,21 +268,24 @@ export async function syncPendingEvaluaciones(): Promise<{ synced: number; error
         }
       }
 
-      // 4c. Obtener predio_id (FK a siembra.predios) si la evaluación tiene familia
+      // 4c. Obtener predio_id/expediente_id (FK a core.predios/core.expedientes)
+      // desde la familia local — identidad/ubicación ya no viajan como columnas
+      // propias de evaluaciones_campo, se leen por JOIN contra core.
       let predio_id: string | null = null
+      let expediente_id: string | null = null
       if (ev.familia_local_id) {
         const fam = await db.familias.filter(f => f.local_id === ev.familia_local_id).first()
-        predio_id = fam?.supabase_id ?? null
+        predio_id     = fam?.predio_core_id ?? null
+        expediente_id = fam?.expediente_id  ?? null
       }
 
       // 5. Upsert en Supabase
-      // Nota: municipio y codigo_predio no son columnas raíz de evaluaciones_campo;
-      // ya viajan dentro de seccion_1_data (JSONB).
+      // Nota: municipio, codigo_predio y nombre_predio ya no son columnas de
+      // evaluaciones_campo; se leen por JOIN a core.predios via predio_id.
       const payload = {
         local_id:       ev.local_id,
-        nombre_predio:  ev.nombre_predio,
         fecha_visita:   ev.fecha_visita || null,
-        num_zonas_eval: ev.num_zonas,
+        num_zonas_eval: zonas_data.length,
         step_completed: finalStepCompleted,
         created_by:     ev.created_by || null,
         seccion_1_data: seccion_1,
@@ -277,6 +296,7 @@ export async function syncPendingEvaluaciones(): Promise<{ synced: number; error
         firma_eval2_url,
         firma_prop_url,
         predio_id,
+        expediente_id,
         sync_origin:    'pwa',
         updated_at:     new Date().toISOString(),
       }
@@ -371,22 +391,25 @@ export async function syncPendingEncuestas(): Promise<{ synced: number; errors: 
         }
       }
 
-      // Obtener predio_id si la encuesta tiene familia padre
+      // Obtener predio_id/expediente_id (core) si la encuesta tiene familia padre
       let predio_id: string | null = null
+      let expediente_id: string | null = null
       if (enc.familia_local_id) {
         const fam = await db.familias.filter(f => f.local_id === enc.familia_local_id).first()
-        predio_id = fam?.supabase_id ?? null
+        predio_id     = fam?.predio_core_id ?? null
+        expediente_id = fam?.expediente_id  ?? null
       }
 
+      // Nota: nombre_propietario/municipio/vereda ya no son columnas de
+      // siembra.familias (se leen por JOIN a core.aliados/core.predios).
       const payload = {
         local_id:           enc.local_id,
         sync_origin:        'pwa',
-        nombre_propietario: enc.nombre_propietario || null,
-        municipio:          enc.municipio          || null,
-        vereda:             enc.vereda             || null,
         fecha_encuesta:     enc.fecha_encuesta     || null,
         created_by:         enc.created_by         || null,
         step_completed:     finalStepCompleted,
+        predio_id,
+        expediente_id,
         sec_general,
         sec_vivienda,
         sec_familia,
@@ -395,7 +418,6 @@ export async function syncPendingEncuestas(): Promise<{ synced: number; errors: 
         sec_ganaderia,
         sec_tecnologia,
         sec_bosque,
-        predio_id,
         updated_at:         new Date().toISOString(),
       }
 
@@ -487,9 +509,10 @@ export async function syncPendingPredios(): Promise<{ synced: number; errors: nu
       })
 
       // 5. Upsert en evaluaciones_campo
+      // Nota: nombre_predio ya no es columna propia de evaluaciones_campo
+      // (se lee por JOIN a core.predios); queda dentro de seccion_1_data.
       const evalPayload = {
         local_id:       predio.local_id,
-        nombre_predio:  predio.nombre_predio,
         fecha_visita:   predio.fecha || null,
         num_zonas_eval: predio.num_zonas,
         step_completed: predio.step_completed,
@@ -533,12 +556,11 @@ export async function syncPendingPredios(): Promise<{ synced: number; errors: nu
       }
 
       // 6. Upsert en siembra.familias
+      // Nota: nombre_propietario/municipio/vereda ya no son columnas propias
+      // (se leen por JOIN a core.aliados/core.predios); quedan dentro de sec_general.
       const encPayload = {
         local_id:           predio.local_id,
         sync_origin:        'pwa',
-        nombre_propietario: predio.nombre_propietario || null,
-        municipio:          predio.municipio          || null,
-        vereda:             predio.vereda             || null,
         fecha_encuesta:     predio.fecha              || null,
         created_by:         predio.created_by         || null,
         step_completed:     predio.step_completed,
