@@ -16,10 +16,16 @@ import {
   zonasVigentes, parseGeom, areaHa, posicionRespectoZonas,
   centroZonas, distanciaTexto, type ZonaVigente,
 } from '../../lib/geo'
+import { generarZonasPractica } from '../../lib/practica'
 import { useOnlineStatus } from '../../lib/useOnlineStatus'
 
 // ─── Estilos por estado de la zona ────────────────────────────────────────────
 const ESTILO_FINCA: L.PathOptions = { color: '#ffffff', weight: 2, dashArray: '6 4', fill: false }
+// Sombra del polígono tal como estaba justo antes de la corrección en curso
+const ESTILO_FANTASMA: L.PathOptions = {
+  color: '#6b7280', weight: 2, dashArray: '3 5',
+  fillColor: '#6b7280', fillOpacity: 0.25, interactive: false,
+}
 
 function estiloZona(z: ZonaVigente, seleccionada: boolean): L.PathOptions {
   let color = '#f59e0b'                                    // original del SIG (por verificar)
@@ -71,12 +77,16 @@ export function SigPage() {
   const gpsMarkerRef = useRef<L.CircleMarker | null>(null)
   const gpsCircleRef = useRef<L.Circle | null>(null)
   const editLayerRef = useRef<L.Polygon | null>(null)
+  const ghostLayerRef = useRef<L.GeoJSON | null>(null)
   const fittedRef = useRef(false)
   const siguiendoRef = useRef(true)
   const modoRef = useRef<Modo>('ver')
+  const familiaRef = useRef<FamiliaRecord | null>(null)
+  const anclandoRef = useRef(false)   // evita doble anclaje si llegan 2 fixes de GPS casi juntos
 
   siguiendoRef.current = siguiendo
   modoRef.current = modo
+  familiaRef.current = familia
 
   // ─── Cargar datos locales ────────────────────────────────────────────────────
   const cargar = useCallback(async () => {
@@ -182,6 +192,26 @@ export function SigPage() {
         setGpsError(null)
         const p = { lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy }
         setGps(p)
+
+        // Predio de práctica: en el primer fix real de GPS, las zonas de
+        // ejercicio (hasta ahora en la ubicación de respaldo) se regeneran
+        // alrededor de este punto. Se ancla una sola vez por predio.
+        const fam = familiaRef.current
+        if (fam?.es_practica && !fam.practica_anclada && !anclandoRef.current) {
+          anclandoRef.current = true
+          const { finca, siembra } = generarZonasPractica(p.lat, p.lon)
+          db.familias.update(fam.id!, {
+            zonas_finca: finca,
+            zonas_sig:   siembra,
+            num_zonas:   siembra.length,
+            practica_anclada: true,
+            updated_at:  new Date().toISOString(),
+          }).then(() => {
+            fittedRef.current = false
+            return cargar()
+          })
+        }
+
         const map = mapRef.current
         if (!map) return
         if (!gpsMarkerRef.current) {
@@ -199,6 +229,7 @@ export function SigPage() {
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
     )
     return () => navigator.geolocation.clearWatch(watchId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function centrarEnMi() {
@@ -257,12 +288,34 @@ export function SigPage() {
     await cargar()
   }
 
+  function quitarFantasma() {
+    if (ghostLayerRef.current) {
+      mapRef.current?.removeLayer(ghostLayerRef.current)
+      ghostLayerRef.current = null
+    }
+  }
+
   function empezarEdicion() {
     if (!zonaSel) return
     const capa = capasPorZonaRef.current.get(zonaSel.zona_numero)
-    if (!capa) return
+    const map = mapRef.current
+    if (!capa || !map) return
     editLayerRef.current = capa
-    capa.pm.enable({ allowSelfIntersection: false })
+
+    // Sombra fija del límite tal como estaba justo antes de esta corrección
+    const original = parseGeom(zonaSel.geojson)
+    if (original) {
+      const ghost = L.geoJSON(original, { style: ESTILO_FANTASMA })
+      ghost.addTo(map)
+      const ghostPoly = ghost.getLayers()[0] as L.Polygon | undefined
+      ghostPoly?.bringToBack()
+      ghostLayerRef.current = ghost
+    }
+
+    // removeVertexOn 'click': tocar un vértice lo elimina; arrastrarlo lo mueve
+    // (Leaflet ya distingue toque-sin-mover de arrastre real, así que no chocan).
+    capa.pm.enable({ allowSelfIntersection: false, removeVertexOn: 'click' })
+    capa.bringToFront()
     setModo('editar')
   }
 
@@ -274,6 +327,7 @@ export function SigPage() {
     const geomStr = JSON.stringify(feat.geometry)
     setModo('ver')
     editLayerRef.current = null
+    quitarFantasma()
     // Una zona nueva (aún sin id) que se re-edita sigue siendo 'nueva'
     const accion = zonaSel.zona_id === null && zonaSel.revision?.sync_status !== 'synced' ? 'nueva' : 'modificada'
     await upsertRevision(zonaSel, { accion, metodo: accion === 'nueva' ? 'nueva' : 'vertices', geojson: geomStr, area_ha: areaHa(geomStr) })
@@ -282,6 +336,7 @@ export function SigPage() {
   function cancelarEdicion() {
     editLayerRef.current?.pm.disable()
     editLayerRef.current = null
+    quitarFantasma()
     setModo('ver')
     cargar()   // repintar la geometría original
   }
@@ -415,7 +470,7 @@ export function SigPage() {
         {/* Guardar/cancelar en modo edición */}
         {modo === 'editar' && (
           <div className="absolute left-3 right-3 bottom-3 z-[1000] bg-blue-600 text-white rounded-xl shadow-lg px-4 py-3 flex items-center justify-between gap-3">
-            <p className="text-xs font-medium">Arrastra los vértices para corregir el límite. Toca una línea para agregar un vértice.</p>
+            <p className="text-xs font-medium">Arrastra un vértice para moverlo, tócalo para eliminarlo, o toca una línea para agregar uno nuevo. La sombra gris punteada es el límite anterior.</p>
             <div className="flex gap-2 shrink-0">
               <button onClick={guardarEdicion} className="flex items-center gap-1 text-xs font-bold bg-white text-blue-700 px-3 py-1.5 rounded-lg">
                 <Check size={13} /> Guardar

@@ -21,6 +21,7 @@ import { useOnlineStatus } from '../lib/useOnlineStatus'
 import { evalTable, encTable } from '../lib/supabase'
 import { getPrediosHabilitadosCache } from '../lib/core'
 import { newFamiliaDesdeHabilitado } from '../types/familia'
+import { crearFamiliaPractica } from '../lib/practica'
 import { InstallBanner } from '../components/ui/InstallBanner'
 import { UserSetup } from '../components/ui/UserSetup'
 import { StatsTab } from './Stats'
@@ -121,7 +122,12 @@ function LocalFamiliaCard({
       <button className="w-full text-left px-4 pt-4 pb-3 flex items-start gap-3"
         onClick={() => navigate(`/familia/${familia.local_id}`)}>
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-gray-800 truncate">{familia.nombre_predio || '(Sin nombre)'}</p>
+          <div className="flex items-center gap-2">
+            {familia.es_practica && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-600 flex-shrink-0">PRÁCTICA</span>
+            )}
+            <p className="font-semibold text-gray-800 truncate">{familia.nombre_predio || '(Sin nombre)'}</p>
+          </div>
           <p className="text-xs text-gray-500 mt-0.5 truncate">
             {familia.nombre_propietario}
             {familia.municipio && ` · ${familia.municipio}`}
@@ -372,7 +378,21 @@ export function Home() {
     setPendingRevs(rv)
   }, [])
 
-  useEffect(() => { loadLocal() }, [loadLocal])
+  // Predio de práctica (capacitación): asegura que cualquiera que abra la app
+  // por primera vez en este dispositivo tenga uno listo, sin depender de
+  // Supabase ni de un predio real habilitado por Jurídica+SIG.
+  // Transacción 'rw': React StrictMode (dev) invoca este efecto dos veces al
+  // montar: sin la transacción, ambas pasadas podrían leer "no existe" antes
+  // de que la otra insertara, duplicando el predio de práctica.
+  useEffect(() => {
+    (async () => {
+      await db.transaction('rw', db.familias, async () => {
+        const existente = await db.familias.filter(f => f.es_practica === true).first()
+        if (!existente) await db.familias.add(crearFamiliaPractica())
+      })
+      await loadLocal()
+    })()
+  }, [loadLocal])
 
   // ─── Cargar datos remotos ────────────────────────────────────────────────────
   const loadRemote = useCallback(async () => {

@@ -6,6 +6,16 @@ import type { CultivoRow, EncuestaPredialRecord } from '../types/encuesta'
 function encTable()     { return supabase.schema('siembra').from('familias') }
 function predioTable()  { return supabase.schema('siembra').from('evaluaciones_campo') }
 
+// ─── Predio de práctica (capacitación): nunca debe tocar Supabase ────────────
+// Los registros ligados a una familia es_practica se marcan 'synced' local-
+// mente (para que el flujo de "pendiente → sincronizado" se vea completo en
+// la capacitación) sin llamar jamás a la red.
+async function esFamiliaDePractica(familiaLocalId: string | null | undefined): Promise<boolean> {
+  if (!familiaLocalId) return false
+  const fam = await db.familias.where('local_id').equals(familiaLocalId).first()
+  return fam?.es_practica === true
+}
+
 // ─── Helpers de merge colaborativo ────────────────────────────────────────────
 
 /** Local wins: toma remote como base, aplica local solo para campos no vacíos */
@@ -122,6 +132,11 @@ export async function syncPendingRevisiones(): Promise<{ synced: number; errors:
 
   for (const rev of pending.sort((a, b) => a.created_at.localeCompare(b.created_at))) {
     try {
+      if (await esFamiliaDePractica(rev.familia_local_id)) {
+        await db.revisiones.update(rev.id!, { sync_status: 'synced', sync_error: null, updated_at: new Date().toISOString() })
+        synced++
+        continue
+      }
       const { data: zonaId, error } = await supabase.schema('geo').rpc('revisar_zona', {
         p_local_id:      rev.local_id,
         p_predio_id:     rev.predio_core_id,
@@ -192,6 +207,12 @@ export async function syncPendingEvaluaciones(): Promise<{ synced: number; error
 
   for (const ev of pending) {
     try {
+      if (await esFamiliaDePractica(ev.familia_local_id)) {
+        await db.evaluaciones.update(ev.id!, { sync_status: 'synced', sync_error: null, updated_at: new Date().toISOString() })
+        synced++
+        continue
+      }
+
       // 1. Subir fotos pendientes de esta evaluación
       const pendingPhotos = await db.photos
         .where('local_evaluacion_id').equals(ev.local_id)
@@ -348,6 +369,12 @@ export async function syncPendingEncuestas(): Promise<{ synced: number; errors: 
 
   for (const enc of pending) {
     try {
+      if (await esFamiliaDePractica(enc.familia_local_id)) {
+        await db.encuestas.update(enc.id!, { sync_status: 'synced', sync_error: null, updated_at: new Date().toISOString() })
+        synced++
+        continue
+      }
+
       // Merge colaborativo: combinar secciones con el estado remoto si existe
       let sec_general    = enc.sec_general    as Record<string, unknown>
       let sec_vivienda   = enc.sec_vivienda   as Record<string, unknown>

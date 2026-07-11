@@ -35,6 +35,11 @@ export interface FamiliaRecord {
   num_zonas:   number
 
   fecha: string   // fecha de la visita/encuesta — esto sí lo define el encuestador
+
+  // Predio de práctica para capacitación (ver lib/practica.ts): no representa
+  // un predio real, nunca se sincroniza a Supabase (ver guards en lib/sync.ts).
+  es_practica?:       boolean
+  practica_anclada?:  boolean   // true una vez que las zonas ya se generaron alrededor del GPS real
 }
 
 /** Crea la familia de trabajo local a partir de un predio ya habilitado (Jurídica+SIG). */

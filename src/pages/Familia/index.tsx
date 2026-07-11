@@ -14,7 +14,7 @@ function FichaPredio({ familia, onBack }: { familia: FamiliaRecord; onBack: () =
   const [refreshing, setRefreshing] = useState(false)
 
   async function handleRefreshZonas() {
-    if (!familia.predio_core_id || !online) return
+    if (!familia.predio_core_id || !online || familia.es_practica) return
     setRefreshing(true)
     try {
       const { siembra, finca } = await fetchZonasPredio(familia.predio_core_id)
@@ -40,7 +40,12 @@ function FichaPredio({ familia, onBack }: { familia: FamiliaRecord; onBack: () =
       </header>
 
       <main className="flex-1 overflow-y-auto px-4 py-5 space-y-4 pb-10">
-        {!familia.predio_core_id && (
+        {familia.es_practica && (
+          <div className="bg-purple-50 border border-purple-200 rounded-xl px-4 py-3 text-xs text-purple-700">
+            Predio de práctica para capacitación — no es un predio real y nunca se sincroniza a Supabase.
+          </div>
+        )}
+        {!familia.predio_core_id && !familia.es_practica && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-700">
             Este registro se creó antes de conectar la app con Jurídica/SIG y no tiene predio de origen enlazado.
           </div>
@@ -62,7 +67,7 @@ function FichaPredio({ familia, onBack }: { familia: FamiliaRecord; onBack: () =
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 space-y-2">
           <div className="flex items-center justify-between">
             <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Zonas del SIG</p>
-            <button onClick={handleRefreshZonas} disabled={refreshing || !online}
+            <button onClick={handleRefreshZonas} disabled={refreshing || !online || familia.es_practica}
               className="flex items-center gap-1 text-xs font-semibold text-[#0d7377] disabled:opacity-40">
               <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} /> Actualizar
             </button>
