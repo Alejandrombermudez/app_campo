@@ -314,7 +314,9 @@ export function SigPage() {
 
     // removeVertexOn 'click': tocar un vértice lo elimina; arrastrarlo lo mueve
     // (Leaflet ya distingue toque-sin-mover de arrastre real, así que no chocan).
-    capa.pm.enable({ allowSelfIntersection: false, removeVertexOn: 'click' })
+    // snappable:false — geoman por defecto imanta el vértice arrastrado a la
+    // capa más cercana (incluida la sombra del límite anterior u otras zonas).
+    capa.pm.enable({ allowSelfIntersection: false, removeVertexOn: 'click', snappable: false })
     capa.bringToFront()
     setModo('editar')
   }
@@ -346,7 +348,7 @@ export function SigPage() {
     if (!map) return
     setSelNum(null)
     setModo('dibujar')
-    map.pm.enableDraw('Polygon', { allowSelfIntersection: false })
+    map.pm.enableDraw('Polygon', { allowSelfIntersection: false, snappable: false })
   }
 
   function cancelarDibujo() {
