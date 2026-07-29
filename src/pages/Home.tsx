@@ -19,7 +19,7 @@ import {
 } from '../lib/sync'
 import { useOnlineStatus } from '../lib/useOnlineStatus'
 import { evalTable, encTable } from '../lib/supabase'
-import { getPrediosHabilitadosCache } from '../lib/core'
+import { refreshPrediosHabilitados } from '../lib/core'
 import { newFamiliaDesdeHabilitado } from '../types/familia'
 import { crearFamiliaPractica } from '../lib/practica'
 import { InstallBanner } from '../components/ui/InstallBanner'
@@ -112,8 +112,10 @@ function LocalFamiliaCard({
   const navigate = useNavigate()
   const st       = STATUS[familia.sync_status]
 
+  // Total de pasos = número real de zonas de la evaluación, no familia.num_zonas
+  // (ese es un snapshot congelado del momento en que se creó la familia).
   const campoStatus: FormStatus = !campoEval ? 'pendiente'
-    : campoEval.step_completed >= evalStepsTotal(familia.num_zonas) - 1 ? 'completo' : 'en_curso'
+    : campoEval.step_completed >= evalStepsTotal(campoEval.zonas.length) - 1 ? 'completo' : 'en_curso'
   const predialStatus: FormStatus = !predialEnc ? 'pendiente'
     : predialEnc.step_completed >= ENC_STEPS - 1 ? 'completo' : 'en_curso'
 
@@ -405,8 +407,13 @@ export function Home() {
           .order('created_at', { ascending: false }).limit(100),
         encTable()
           .select('id, local_id, fecha_encuesta, created_by, created_at, predio_id, step_completed')
+          .is('deleted_at', null)   // no mostrar familias soft-deleted en "Todos"
           .order('created_at', { ascending: false }).limit(100),
-        getPrediosHabilitadosCache(),
+        // Descargar los predios habilitados (v_predios_campo) para resolver el
+        // nombre de cada registro remoto. Antes se leía solo la caché local, que
+        // está vacía hasta que se entra al flujo "+": por eso "Todos" salía sin
+        // nombres ("predio sin caché local") hasta pulsar el +.
+        refreshPrediosHabilitados(),
       ])
       if (de) setRemoteEvals(de as RemoteEval[])
       if (dn) setRemoteEncs(dn as RemoteEnc[])
