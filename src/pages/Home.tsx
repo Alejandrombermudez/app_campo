@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Plus, RefreshCw, Wifi, WifiOff, Trash2, ChevronRight,
+  RefreshCw, Wifi, WifiOff, Trash2, ChevronRight,
   Copy, ChevronDown, ChevronUp, User, Globe, BarChart2,
-  CheckCircle, Clock, AlertCircle, Loader2, Download, Eye,
+  CheckCircle, Clock, AlertCircle, Loader2, MapPin, Eye,
 } from 'lucide-react'
 import { db } from '../db/schema'
 import type { FamiliaRecord } from '../types/familia'
@@ -20,11 +20,11 @@ import {
 import { useOnlineStatus } from '../lib/useOnlineStatus'
 import { evalTable, encTable } from '../lib/supabase'
 import { refreshPrediosHabilitados } from '../lib/core'
-import { newFamiliaDesdeHabilitado } from '../types/familia'
 import { crearFamiliaPractica } from '../lib/practica'
 import { InstallBanner } from '../components/ui/InstallBanner'
 import { UserSetup } from '../components/ui/UserSetup'
 import { StatsTab } from './Stats'
+import { SelectorPredios, type PredioSubmissionStatus } from './Familia'
 
 // ─── Tipos remotos ─────────────────────────────────────────────────────────────
 // predio_id apunta a core.predios (ver migration_campo_core.sql); nombre/municipio
@@ -242,23 +242,16 @@ function LocalEncCard({ enc, onDelete }: { enc: EncuestaPredialRecord; onDelete:
 
 // ─── Tarjetas remotas ──────────────────────────────────────────────────────────
 function RemoteEvalCard({
-  ev, predio, onOpen, onDelete,
+  ev, predio, onDelete,
 }: {
   ev: RemoteEval
   predio?: PredioHabilitado
-  onOpen: () => Promise<void>
   onDelete: () => Promise<void>
 }) {
   const navigate = useNavigate()
-  const [loading,   setLoading]   = useState(false)
   const [deleting,  setDeleting]  = useState(false)
 
-  async function handle() {
-    setLoading(true)
-    try { await onOpen() } catch (e) { console.error(e) } finally { setLoading(false) }
-  }
-  function handleVer(e: React.MouseEvent) {
-    e.stopPropagation()
+  function handleVer() {
     navigate(`/ver/campo/${ev.id}`)
   }
   async function handleDelete(e: React.MouseEvent) {
@@ -269,16 +262,14 @@ function RemoteEvalCard({
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-      <button onClick={handle} disabled={loading || deleting}
+      <button onClick={handleVer} disabled={deleting}
         className="w-full text-left px-4 pt-4 pb-3 active:bg-gray-50 disabled:opacity-60">
         <div className="flex items-center justify-between gap-2 mb-0.5">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#0d7377]/10 text-[#0d7377] flex-shrink-0">CAMPO</span>
             <p className="font-semibold text-gray-800 truncate">{predio?.nombre_predio ?? '(predio sin caché local)'}</p>
           </div>
-          {loading
-            ? <Loader2 size={16} className="text-[#0d7377] animate-spin flex-shrink-0"/>
-            : <Download size={16} className="text-gray-300 flex-shrink-0"/>}
+          <Eye size={16} className="text-gray-300 flex-shrink-0"/>
         </div>
         <p className="text-xs text-gray-500 truncate">
           {predio?.municipio ?? '—'}{ev.fecha_visita && ` · ${new Date(ev.fecha_visita + 'T00:00:00').toLocaleDateString('es-CO')}`}
@@ -288,39 +279,26 @@ function RemoteEvalCard({
         <span className="text-xs text-gray-400 flex items-center gap-1">
           {ev.created_by && <><User size={10}/>{ev.created_by}</>}
         </span>
-        <div className="flex items-center gap-3">
-          <button onClick={handleVer} disabled={loading || deleting}
-            className="text-xs text-[#0d7377] flex items-center gap-1 disabled:opacity-40 font-medium">
-            <Eye size={11}/> Ver
-          </button>
-          <button onClick={handleDelete} disabled={loading || deleting}
-            className="text-xs text-red-400 flex items-center gap-1 disabled:opacity-40">
-            {deleting ? <Loader2 size={11} className="animate-spin"/> : <Trash2 size={11}/>} Eliminar
-          </button>
-        </div>
+        <button onClick={handleDelete} disabled={deleting}
+          className="text-xs text-red-400 flex items-center gap-1 disabled:opacity-40">
+          {deleting ? <Loader2 size={11} className="animate-spin"/> : <Trash2 size={11}/>} Eliminar
+        </button>
       </div>
     </div>
   )
 }
 
 function RemoteEncCard({
-  enc, predio, onOpen, onDelete,
+  enc, predio, onDelete,
 }: {
   enc: RemoteEnc
   predio?: PredioHabilitado
-  onOpen: () => Promise<void>
   onDelete: () => Promise<void>
 }) {
   const navigate = useNavigate()
-  const [loading,  setLoading]  = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  async function handle() {
-    setLoading(true)
-    try { await onOpen() } catch (e) { console.error(e) } finally { setLoading(false) }
-  }
-  function handleVer(e: React.MouseEvent) {
-    e.stopPropagation()
+  function handleVer() {
     navigate(`/ver/predial/${enc.id}`)
   }
   async function handleDelete(e: React.MouseEvent) {
@@ -331,16 +309,14 @@ function RemoteEncCard({
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-      <button onClick={handle} disabled={loading || deleting}
+      <button onClick={handleVer} disabled={deleting}
         className="w-full text-left px-4 pt-4 pb-3 active:bg-gray-50 disabled:opacity-60">
         <div className="flex items-center justify-between gap-2 mb-0.5">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 flex-shrink-0">PREDIAL</span>
             <p className="font-semibold text-gray-800 truncate">{predio?.nombre_propietario ?? '(predio sin caché local)'}</p>
           </div>
-          {loading
-            ? <Loader2 size={16} className="text-emerald-600 animate-spin flex-shrink-0"/>
-            : <Download size={16} className="text-gray-300 flex-shrink-0"/>}
+          <Eye size={16} className="text-gray-300 flex-shrink-0"/>
         </div>
         <p className="text-xs text-gray-500 truncate">
           {predio?.municipio ?? '—'}{predio?.vereda && ` · ${predio.vereda}`}
@@ -350,16 +326,10 @@ function RemoteEncCard({
         <span className="text-xs text-gray-400 flex items-center gap-1">
           {enc.created_by && <><User size={10}/>{enc.created_by}</>}
         </span>
-        <div className="flex items-center gap-3">
-          <button onClick={handleVer} disabled={loading || deleting}
-            className="text-xs text-emerald-600 flex items-center gap-1 disabled:opacity-40 font-medium">
-            <Eye size={11}/> Ver
-          </button>
-          <button onClick={handleDelete} disabled={loading || deleting}
-            className="text-xs text-red-400 flex items-center gap-1 disabled:opacity-40">
-            {deleting ? <Loader2 size={11} className="animate-spin"/> : <Trash2 size={11}/>} Eliminar
-          </button>
-        </div>
+        <button onClick={handleDelete} disabled={deleting}
+          className="text-xs text-red-400 flex items-center gap-1 disabled:opacity-40">
+          {deleting ? <Loader2 size={11} className="animate-spin"/> : <Trash2 size={11}/>} Eliminar
+        </button>
       </div>
     </div>
   )
@@ -367,10 +337,9 @@ function RemoteEncCard({
 
 // ─── Home ───────────────────────────────────────────────────────────────────────
 export function Home() {
-  const navigate = useNavigate()
   const online   = useOnlineStatus()
 
-  const [tab, setTab]               = useState<'mios' | 'todos' | 'stats'>('mios')
+  const [tab, setTab]               = useState<'mios' | 'predios' | 'todos' | 'stats'>('mios')
   const [familias,  setFamilias]    = useState<FamiliaRecord[]>([])
   const [predios,   setPredios]     = useState<PredioRecord[]>([])
   const [evals,     setEvals]       = useState<EvaluacionRecord[]>([])
@@ -432,9 +401,7 @@ export function Home() {
           .is('deleted_at', null)   // no mostrar familias soft-deleted en "Todos"
           .order('created_at', { ascending: false }).limit(100),
         // Descargar los predios habilitados (v_predios_campo) para resolver el
-        // nombre de cada registro remoto. Antes se leía solo la caché local, que
-        // está vacía hasta que se entra al flujo "+": por eso "Todos" salía sin
-        // nombres ("predio sin caché local") hasta pulsar el +.
+        // nombre de cada registro remoto y para las tarjetas del tab "Predios".
         refreshPrediosHabilitados(),
       ])
       if (de) setRemoteEvals(de as RemoteEval[])
@@ -445,7 +412,20 @@ export function Home() {
     }
   }, [online])
 
-  useEffect(() => { if (tab === 'todos') loadRemote() }, [tab, loadRemote])
+  // "Predios" también necesita remoteEvals/remoteEncs para las etiquetas
+  // "ya diligenciado por..." y evitar que dos personas llenen el mismo predio.
+  useEffect(() => { if (tab === 'todos' || tab === 'predios') loadRemote() }, [tab, loadRemote])
+
+  // predio_id → quién ya diligenció Campo / Predial (solo registros sincronizados)
+  const statusByPredio: Record<string, PredioSubmissionStatus> = {}
+  for (const e of remoteEvals) {
+    if (!e.predio_id) continue
+    statusByPredio[e.predio_id] = { ...statusByPredio[e.predio_id], campo: e.created_by ?? '(sin nombre)' }
+  }
+  for (const n of remoteEncs) {
+    if (!n.predio_id) continue
+    statusByPredio[n.predio_id] = { ...statusByPredio[n.predio_id], predial: n.created_by ?? '(sin nombre)' }
+  }
 
   // ─── Sync ────────────────────────────────────────────────────────────────────
   async function handleSync() {
@@ -506,113 +486,6 @@ export function Home() {
     if (!window.confirm(`¿Eliminar encuesta de "${enc.nombre_propietario || 'sin nombre'}"?`)) return
     await db.encuestas.delete(enc.id!)
     await loadLocal()
-  }
-
-  // ─── Encontrar o crear la familia local para un predio_id (core) ────────────
-  async function ensureFamiliaLocal(predioId: string): Promise<string | undefined> {
-    const existing = await db.familias.where('predio_core_id').equals(predioId).first()
-    if (existing) return existing.local_id
-    const cached = prediosCache[predioId]
-    if (!cached) return undefined
-    const familia = newFamiliaDesdeHabilitado(cached)
-    await db.familias.add(familia)
-    return familia.local_id
-  }
-
-  // ─── Importar registro remoto (campo) y abrir localmente ────────────────────
-  async function handleOpenRemoteEval(ev: RemoteEval) {
-    const existing = await db.evaluaciones.where('supabase_id').equals(ev.id).first()
-    if (existing) {
-      if (!existing.familia_local_id && ev.predio_id) {
-        const familiaLocalId = await ensureFamiliaLocal(ev.predio_id)
-        if (familiaLocalId) await db.evaluaciones.update(existing.id!, { familia_local_id: familiaLocalId })
-      }
-      navigate(`/evaluacion/${existing.local_id}`)
-      return
-    }
-
-    const { data, error } = await evalTable().select('*').eq('id', ev.id).single()
-    if (error || !data) throw new Error('No se pudo importar el registro de campo')
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const d = data as any
-    const familia_local_id = ev.predio_id ? await ensureFamiliaLocal(ev.predio_id) : undefined
-    const cached = ev.predio_id ? prediosCache[ev.predio_id] : undefined
-
-    const newEval: EvaluacionRecord = {
-      local_id:         crypto.randomUUID(),
-      supabase_id:      ev.id,
-      familia_local_id,
-      sync_status:      'synced',
-      sync_error:       null,
-      created_at:       d.created_at,
-      updated_at:       d.updated_at ?? d.created_at,
-      step_completed:   d.step_completed ?? 0,
-      created_by:       d.created_by ?? '',
-      nombre_predio:    cached?.nombre_predio ?? '',
-      codigo_predio:    d.seccion_1_data?.codigo_predio ?? '',
-      municipio:        cached?.municipio ?? '',
-      fecha_visita:     d.fecha_visita ?? '',
-      num_zonas:        d.num_zonas_eval ?? 1,
-      seccion_1:        d.seccion_1_data ?? {},
-      seccion_2:        d.seccion_2_data ?? {},
-      zonas:            d.zonas_data ?? [],
-      seccion_6:        d.seccion_6_data ?? {},
-      seccion_7:        {},
-    }
-    await db.evaluaciones.add(newEval)
-    await loadLocal()
-    if (familia_local_id) navigate(`/familia/${familia_local_id}`)
-    else navigate(`/evaluacion/${newEval.local_id}`)
-  }
-
-  // ─── Importar registro remoto (predial) y abrir localmente ──────────────────
-  async function handleOpenRemoteEnc(enc: RemoteEnc) {
-    const existing = await db.encuestas.where('supabase_id').equals(enc.id).first()
-    if (existing) {
-      if (!existing.familia_local_id && enc.predio_id) {
-        const familiaLocalId = await ensureFamiliaLocal(enc.predio_id)
-        if (familiaLocalId) await db.encuestas.update(existing.id!, { familia_local_id: familiaLocalId })
-      }
-      navigate(`/encuesta/${existing.local_id}`)
-      return
-    }
-
-    const { data, error } = await encTable().select('*').eq('id', enc.id).single()
-    if (error || !data) throw new Error('No se pudo importar la encuesta predial')
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const d = data as any
-    const familia_local_id = enc.predio_id ? await ensureFamiliaLocal(enc.predio_id) : undefined
-    const cached = enc.predio_id ? prediosCache[enc.predio_id] : undefined
-
-    const newEnc: EncuestaPredialRecord = {
-      local_id:           crypto.randomUUID(),
-      supabase_id:        enc.id,
-      familia_local_id,
-      sync_status:        'synced',
-      sync_error:         null,
-      created_at:         d.created_at,
-      updated_at:         d.updated_at ?? d.created_at,
-      step_completed:     d.step_completed ?? 0,
-      created_by:         d.created_by ?? '',
-      nombre_propietario: cached?.nombre_propietario ?? '',
-      municipio:          cached?.municipio ?? '',
-      vereda:             cached?.vereda ?? '',
-      fecha_encuesta:     d.fecha_encuesta ?? '',
-      sec_general:        d.sec_general    ?? {},
-      sec_vivienda:       d.sec_vivienda   ?? {},
-      sec_familia:        d.sec_familia    ?? {},
-      sec_economia:       d.sec_economia   ?? {},
-      sec_cultivos:       d.sec_cultivos   ?? [],
-      sec_ganaderia:      d.sec_ganaderia  ?? {},
-      sec_tecnologia:     d.sec_tecnologia ?? {},
-      sec_bosque:         d.sec_bosque     ?? {},
-    }
-    await db.encuestas.add(newEnc)
-    await loadLocal()
-    if (familia_local_id) navigate(`/familia/${familia_local_id}`)
-    else navigate(`/encuesta/${newEnc.local_id}`)
   }
 
   // ─── Eliminar evaluación de campo remota ─────────────────────────────────────
@@ -711,9 +584,10 @@ export function Home() {
         {/* Tabs */}
         <div className="flex gap-1 mt-3 bg-black/20 p-1 rounded-xl">
           {([
-            ['mios',  <User size={13}/>,      'Mis registros', totalLocalCount],
-            ['todos', <Globe size={13}/>,     'Todos',          mixedRemote.length],
-            ['stats', <BarChart2 size={13}/>, 'Estadísticas',   0],
+            ['mios',    <User size={13}/>,      'Mis registros', totalLocalCount],
+            ['predios', <MapPin size={13}/>,    'Predios',        0],
+            ['todos',   <Globe size={13}/>,     'Todos',          mixedRemote.length],
+            ['stats',   <BarChart2 size={13}/>, 'Estadísticas',   0],
           ] as const).map(([key, icon, label, count]) => (
             <button key={key} onClick={() => setTab(key)}
               className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-1.5 rounded-lg transition-colors ${tab === key ? 'bg-white text-[#0d7377]' : 'text-white/80'}`}>
@@ -753,9 +627,9 @@ export function Home() {
           {familias.length === 0 && !hasLegacy ? (
             <div className="flex flex-col items-center justify-center py-20 gap-4 text-gray-400">
               <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center">
-                <Plus size={32} className="text-gray-300"/>
+                <MapPin size={32} className="text-gray-300"/>
               </div>
-              <p className="text-sm text-center">No tienes predios abiertos.<br/>Toca el botón + para elegir uno habilitado por Jurídica + SIG.</p>
+              <p className="text-sm text-center">No tienes predios abiertos.<br/>Ve a la pestaña "Predios" para elegir uno habilitado por Jurídica + SIG.</p>
             </div>
           ) : (
             <>
@@ -788,7 +662,12 @@ export function Home() {
         </main>
       )}
 
-      {/* ── Todos (Supabase) ─────────────────────────────────────────────── */}
+      {/* ── Predios habilitados (elegir + descargar local) ─────────────────── */}
+      {tab === 'predios' && (
+        <SelectorPredios statusByPredio={statusByPredio} embedded />
+      )}
+
+      {/* ── Todos (Supabase, solo lectura) ──────────────────────────────────── */}
       {tab === 'todos' && (
         <main className="flex-1 px-4 py-4 space-y-3 pb-28">
           {!online ? (
@@ -810,7 +689,7 @@ export function Home() {
               <p className="text-xs text-gray-400 px-1">
                 {mixedRemote.filter(m => m.type === 'eval').length} campo +&nbsp;
                 {mixedRemote.filter(m => m.type === 'enc').length} predial en la nube ·
-                "Ver" para consultar sin editar · toca la tarjeta para importar y continuar el formulario
+                bitácora de solo lectura — toca una tarjeta para ver lo diligenciado
               </p>
               {mixedRemote.map(item =>
                 item.type === 'eval'
@@ -818,14 +697,12 @@ export function Home() {
                       key={`re-${item.data.id}`}
                       ev={item.data}
                       predio={item.data.predio_id ? prediosCache[item.data.predio_id] : undefined}
-                      onOpen={() => handleOpenRemoteEval(item.data)}
                       onDelete={() => handleDeleteRemoteEval(item.data)}
                     />
                   : <RemoteEncCard
                       key={`rn-${item.data.id}`}
                       enc={item.data}
                       predio={item.data.predio_id ? prediosCache[item.data.predio_id] : undefined}
-                      onOpen={() => handleOpenRemoteEnc(item.data)}
                       onDelete={() => handleDeleteRemoteEnc(item.data)}
                     />
               )}
@@ -840,14 +717,6 @@ export function Home() {
 
       {/* ── Estadísticas ─────────────────────────────────────────────────── */}
       {tab === 'stats' && <StatsTab />}
-
-      {/* FAB → elegir predio habilitado */}
-      <button
-        onClick={() => navigate('/familia/nueva')}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-[#0d7377] text-white rounded-full shadow-lg flex items-center justify-center"
-      >
-        <Plus size={28}/>
-      </button>
     </div>
   )
 }

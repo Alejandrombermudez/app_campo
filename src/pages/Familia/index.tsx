@@ -90,8 +90,20 @@ function FichaPredio({ familia, onBack }: { familia: FamiliaRecord; onBack: () =
   )
 }
 
+// ─── Estado de diligenciamiento remoto (quién ya llenó qué, por predio) ──────
+export interface PredioSubmissionStatus {
+  campo?:   string   // nombre de quien ya diligenció la Evaluación de Campo
+  predial?: string   // nombre de quien ya diligenció la Encuesta Predial
+}
+
 // ─── Modo "nueva": selector de predios habilitados por Jurídica + SIG ────────
-function SelectorPredios() {
+export function SelectorPredios({
+  statusByPredio, embedded = false,
+}: {
+  statusByPredio?: Record<string, PredioSubmissionStatus>
+  /** true cuando se usa dentro de un tab de Home (sin header propio con flecha "atrás") */
+  embedded?: boolean
+}) {
   const navigate = useNavigate()
   const online   = useOnlineStatus()
   const [predios, setPredios]   = useState<PredioHabilitado[]>([])
@@ -147,14 +159,16 @@ function SelectorPredios() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f0fafa]">
-      <header className="bg-[#0d7377] text-white px-4 py-3 flex items-center gap-3">
-        <button onClick={() => navigate('/')} className="p-1 rounded"><ArrowLeft size={20} /></button>
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-sm">Predios habilitados para Campo</p>
-          <p className="text-xs opacity-60">Ya pasaron por Jurídica + SIG</p>
-        </div>
-      </header>
+    <div className={embedded ? 'flex flex-col' : 'min-h-screen flex flex-col bg-[#f0fafa]'}>
+      {!embedded && (
+        <header className="bg-[#0d7377] text-white px-4 py-3 flex items-center gap-3">
+          <button onClick={() => navigate('/')} className="p-1 rounded"><ArrowLeft size={20} /></button>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-sm">Predios habilitados para Campo</p>
+            <p className="text-xs opacity-60">Ya pasaron por Jurídica + SIG</p>
+          </div>
+        </header>
+      )}
 
       {error && (
         <div className="mx-4 mt-3 rounded-xl px-4 py-3 text-sm font-medium bg-red-50 text-red-700 border border-red-200">
@@ -175,7 +189,7 @@ function SelectorPredios() {
         </div>
       </div>
 
-      <main className="flex-1 overflow-y-auto px-4 pb-10 space-y-2">
+      <main className={`flex-1 px-4 pb-10 space-y-2 ${embedded ? '' : 'overflow-y-auto'}`}>
         {loading && predios.length === 0 ? (
           <div className="flex justify-center py-16">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0d7377]" />
@@ -190,25 +204,42 @@ function SelectorPredios() {
             </p>
           </div>
         ) : (
-          filtered.map(p => (
-            <button
-              key={p.predio_id}
-              onClick={() => handleSelect(p)}
-              disabled={opening !== null}
-              className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-3.5 flex items-center gap-3 text-left active:bg-gray-50 disabled:opacity-60"
-            >
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-gray-800 truncate">{p.nombre_predio}</p>
-                <p className="text-xs text-gray-500 truncate">{p.nombre_propietario}</p>
-                <p className="text-xs text-gray-400 truncate">
-                  {p.municipio}{p.vereda && ` · ${p.vereda}`} · {p.etapa === 'campo' ? 'Habilitado' : 'SIG II'}
-                </p>
-              </div>
-              {opening === p.predio_id
-                ? <Loader2 size={18} className="text-[#0d7377] animate-spin flex-shrink-0" />
-                : <CheckCircle2 size={18} className="text-gray-200 flex-shrink-0" />}
-            </button>
-          ))
+          filtered.map(p => {
+            const status = statusByPredio?.[p.predio_id]
+            return (
+              <button
+                key={p.predio_id}
+                onClick={() => handleSelect(p)}
+                disabled={opening !== null}
+                className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-3.5 flex items-center gap-3 text-left active:bg-gray-50 disabled:opacity-60"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-800 truncate">{p.nombre_predio}</p>
+                  <p className="text-xs text-gray-500 truncate">{p.nombre_propietario}</p>
+                  <p className="text-xs text-gray-400 truncate">
+                    {p.municipio}{p.vereda && ` · ${p.vereda}`} · {p.etapa === 'campo' ? 'Habilitado' : 'SIG II'}
+                  </p>
+                  {(status?.campo || status?.predial) && (
+                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                      {status.campo && (
+                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#0d7377]/10 text-[#0d7377]">
+                          Campo ya diligenciado · {status.campo}
+                        </span>
+                      )}
+                      {status.predial && (
+                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                          Predial ya diligenciado · {status.predial}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {opening === p.predio_id
+                  ? <Loader2 size={18} className="text-[#0d7377] animate-spin flex-shrink-0" />
+                  : <CheckCircle2 size={18} className="text-gray-200 flex-shrink-0" />}
+              </button>
+            )
+          })
         )}
       </main>
     </div>
