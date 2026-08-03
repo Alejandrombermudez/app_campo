@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, ChevronDown, ChevronUp, ExternalLink, WifiOff } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useOnlineStatus } from '../../lib/useOnlineStatus'
+import { getPredioIdentidad, type PredioIdentidad } from '../../lib/core'
 
 // ─── Utilidades de visualización ──────────────────────────────────────────────
 function labelKey(key: string): string {
@@ -116,6 +117,7 @@ export function CampoViewer() {
   const online   = useOnlineStatus()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [record, setRecord]   = useState<Record<string, any> | null>(null)
+  const [predio, setPredio]   = useState<PredioIdentidad | undefined>(undefined)
   const [loading, setLoading] = useState(true)
   const [err, setErr]         = useState<string | null>(null)
 
@@ -123,10 +125,14 @@ export function CampoViewer() {
     if (!id) return
     supabase.schema('siembra').from('evaluaciones_campo')
       .select('*').eq('id', id).single()
-      .then(({ data, error }) => {
+      .then(async ({ data, error }) => {
         if (error) setErr(error.message)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        else setRecord(data as Record<string, any>)
+        else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const d = data as Record<string, any>
+          setRecord(d)
+          if (d.predio_id) setPredio(await getPredioIdentidad(d.predio_id))
+        }
         setLoading(false)
       })
   }, [id])
@@ -168,9 +174,10 @@ export function CampoViewer() {
       <header className="bg-[#0d7377] text-white px-4 py-3 flex items-center gap-3">
         <button onClick={() => navigate(-1)} className="p-1 rounded"><ArrowLeft size={20}/></button>
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-sm truncate">{record.nombre_predio || '(Sin nombre)'}</p>
-          <p className="text-xs opacity-60">
-            Evaluación de campo · {record.created_by ?? '—'}
+          <p className="font-semibold text-sm truncate">{predio?.nombre_predio || '(Predio sin identificar)'}</p>
+          <p className="text-xs opacity-60 truncate">
+            {predio && `${predio.municipio}${predio.vereda ? ` · ${predio.vereda}` : ''} · `}
+            {record.created_by ?? '—'}
             {record.fecha_visita && ` · ${new Date(record.fecha_visita + 'T00:00:00').toLocaleDateString('es-CO')}`}
           </p>
         </div>

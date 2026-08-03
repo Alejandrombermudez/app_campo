@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, ChevronDown, ChevronUp, WifiOff } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useOnlineStatus } from '../../lib/useOnlineStatus'
+import { getPredioIdentidad, type PredioIdentidad } from '../../lib/core'
 
 // ─── Utilidades ────────────────────────────────────────────────────────────────
 function labelKey(key: string): string {
@@ -200,6 +201,7 @@ export function PredialViewer() {
   const online   = useOnlineStatus()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [record,  setRecord]  = useState<Record<string, any> | null>(null)
+  const [predio,  setPredio]  = useState<PredioIdentidad | undefined>(undefined)
   const [loading, setLoading] = useState(true)
   const [err,     setErr]     = useState<string | null>(null)
 
@@ -207,10 +209,14 @@ export function PredialViewer() {
     if (!id) return
     supabase.schema('siembra').from('familias')
       .select('*').eq('id', id).single()
-      .then(({ data, error }) => {
+      .then(async ({ data, error }) => {
         if (error) setErr(error.message)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        else setRecord(data as Record<string, any>)
+        else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const d = data as Record<string, any>
+          setRecord(d)
+          if (d.predio_id) setPredio(await getPredioIdentidad(d.predio_id))
+        }
         setLoading(false)
       })
   }, [id])
@@ -255,10 +261,11 @@ export function PredialViewer() {
         <button onClick={() => navigate(-1)} className="p-1 rounded"><ArrowLeft size={20}/></button>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm truncate">
-            {record.nombre_propietario || (sg as Record<string,unknown>).nombre_propietario as string || '(Sin nombre)'}
+            {predio?.nombre_predio || '(Predio sin identificar)'}
           </p>
-          <p className="text-xs opacity-60">
-            Encuesta predial · {record.created_by ?? '—'}
+          <p className="text-xs opacity-60 truncate">
+            {predio?.nombre_propietario && `${predio.nombre_propietario} · `}
+            {record.created_by ?? '—'}
             {record.fecha_encuesta && ` · ${new Date(record.fecha_encuesta + 'T00:00:00').toLocaleDateString('es-CO')}`}
           </p>
         </div>

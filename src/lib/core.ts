@@ -89,3 +89,24 @@ export function getPrediosHabilitadosCache(): Promise<PredioHabilitado[]> {
 export function getPredioHabilitadoCache(predioId: string): Promise<PredioHabilitado | undefined> {
   return db.prediosHabilitados.get(predioId)
 }
+
+/** Identidad de un predio (nombre/municipio/propietario) para mostrar en los visualizadores de solo lectura. */
+export interface PredioIdentidad {
+  nombre_predio: string
+  municipio: string
+  vereda: string
+  nombre_propietario: string
+}
+
+export async function getPredioIdentidad(predioId: string): Promise<PredioIdentidad | undefined> {
+  const cached = await getPredioHabilitadoCache(predioId)
+  if (cached) return cached
+
+  if (!navigator.onLine) return undefined
+  const { data, error } = await prediosCampoTable()
+    .select('nombre_predio, municipio, vereda, nombre_propietario')
+    .eq('predio_id', predioId)
+    .maybeSingle()
+  if (error || !data) return undefined
+  return data
+}

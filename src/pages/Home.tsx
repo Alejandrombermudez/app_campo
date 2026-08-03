@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Plus, RefreshCw, Wifi, WifiOff, Trash2, ChevronRight,
   Copy, ChevronDown, ChevronUp, User, Globe, BarChart2,
-  CheckCircle, Clock, AlertCircle, Loader2, Download,
+  CheckCircle, Clock, AlertCircle, Loader2, Download, Eye,
 } from 'lucide-react'
 import { db } from '../db/schema'
 import type { FamiliaRecord } from '../types/familia'
@@ -249,12 +249,17 @@ function RemoteEvalCard({
   onOpen: () => Promise<void>
   onDelete: () => Promise<void>
 }) {
+  const navigate = useNavigate()
   const [loading,   setLoading]   = useState(false)
   const [deleting,  setDeleting]  = useState(false)
 
   async function handle() {
     setLoading(true)
     try { await onOpen() } catch (e) { console.error(e) } finally { setLoading(false) }
+  }
+  function handleVer(e: React.MouseEvent) {
+    e.stopPropagation()
+    navigate(`/ver/campo/${ev.id}`)
   }
   async function handleDelete(e: React.MouseEvent) {
     e.stopPropagation()
@@ -283,10 +288,16 @@ function RemoteEvalCard({
         <span className="text-xs text-gray-400 flex items-center gap-1">
           {ev.created_by && <><User size={10}/>{ev.created_by}</>}
         </span>
-        <button onClick={handleDelete} disabled={loading || deleting}
-          className="text-xs text-red-400 flex items-center gap-1 disabled:opacity-40">
-          {deleting ? <Loader2 size={11} className="animate-spin"/> : <Trash2 size={11}/>} Eliminar
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={handleVer} disabled={loading || deleting}
+            className="text-xs text-[#0d7377] flex items-center gap-1 disabled:opacity-40 font-medium">
+            <Eye size={11}/> Ver
+          </button>
+          <button onClick={handleDelete} disabled={loading || deleting}
+            className="text-xs text-red-400 flex items-center gap-1 disabled:opacity-40">
+            {deleting ? <Loader2 size={11} className="animate-spin"/> : <Trash2 size={11}/>} Eliminar
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -300,12 +311,17 @@ function RemoteEncCard({
   onOpen: () => Promise<void>
   onDelete: () => Promise<void>
 }) {
+  const navigate = useNavigate()
   const [loading,  setLoading]  = useState(false)
   const [deleting, setDeleting] = useState(false)
 
   async function handle() {
     setLoading(true)
     try { await onOpen() } catch (e) { console.error(e) } finally { setLoading(false) }
+  }
+  function handleVer(e: React.MouseEvent) {
+    e.stopPropagation()
+    navigate(`/ver/predial/${enc.id}`)
   }
   async function handleDelete(e: React.MouseEvent) {
     e.stopPropagation()
@@ -334,10 +350,16 @@ function RemoteEncCard({
         <span className="text-xs text-gray-400 flex items-center gap-1">
           {enc.created_by && <><User size={10}/>{enc.created_by}</>}
         </span>
-        <button onClick={handleDelete} disabled={loading || deleting}
-          className="text-xs text-red-400 flex items-center gap-1 disabled:opacity-40">
-          {deleting ? <Loader2 size={11} className="animate-spin"/> : <Trash2 size={11}/>} Eliminar
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={handleVer} disabled={loading || deleting}
+            className="text-xs text-emerald-600 flex items-center gap-1 disabled:opacity-40 font-medium">
+            <Eye size={11}/> Ver
+          </button>
+          <button onClick={handleDelete} disabled={loading || deleting}
+            className="text-xs text-red-400 flex items-center gap-1 disabled:opacity-40">
+            {deleting ? <Loader2 size={11} className="animate-spin"/> : <Trash2 size={11}/>} Eliminar
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -787,7 +809,8 @@ export function Home() {
             <>
               <p className="text-xs text-gray-400 px-1">
                 {mixedRemote.filter(m => m.type === 'eval').length} campo +&nbsp;
-                {mixedRemote.filter(m => m.type === 'enc').length} predial en la nube · toca para importar
+                {mixedRemote.filter(m => m.type === 'enc').length} predial en la nube ·
+                "Ver" para consultar sin editar · toca la tarjeta para importar y continuar el formulario
               </p>
               {mixedRemote.map(item =>
                 item.type === 'eval'
