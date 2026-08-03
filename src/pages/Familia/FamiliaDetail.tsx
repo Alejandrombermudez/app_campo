@@ -8,6 +8,7 @@ import { reconciliarZonas } from '../../types/evaluacion'
 import type { EncuestaPredialRecord, CultivoRow } from '../../types/encuesta'
 import type { RevisionRecord } from '../../types/revision'
 import { zonasActivas, zonasVigentes } from '../../lib/geo'
+import { buscarDiligenciamientoPropio } from '../../lib/core'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const CULTIVOS_BASE = ['Café', 'Cacao', 'Caña de azúcar', 'Plátano', 'Yuca', 'Frutales', 'Madera']
@@ -105,6 +106,19 @@ export function FamiliaDetail() {
         .where('familia_local_id').equals(familia.local_id).first()
       if (existing) { navigate(`/evaluacion/${existing.local_id}`); return }
 
+      // La misma persona no puede diligenciar dos veces el mismo predio, aunque
+      // no quede rastro local (otro dispositivo, reinstalación, etc.) — se
+      // verifica contra lo ya sincronizado en Supabase.
+      if (familia.predio_core_id && !familia.es_practica) {
+        const userName = localStorage.getItem('ae_campo_user') ?? ''
+        const propio = await buscarDiligenciamientoPropio('evaluaciones_campo', familia.predio_core_id, userName)
+        if (propio) {
+          alert(`Ya registraste una Evaluación de Campo para "${familia.nombre_predio}" con el nombre "${userName}". No se puede crear otra — la puedes consultar en la pestaña "Todos".`)
+          navigate(`/ver/campo/${propio.id}`)
+          return
+        }
+      }
+
       const zonas: ZonaData[] = activas.map((z, i) => ({
         zona_id: z.zona_id, zona_numero: i + 1, area_ha_sig: z.area_ha,
         cobertura: {}, suelo: {}, logistica: {},
@@ -151,6 +165,16 @@ export function FamiliaDetail() {
       const existing = await db.encuestas
         .where('familia_local_id').equals(familia.local_id).first()
       if (existing) { navigate(`/encuesta/${existing.local_id}`); return }
+
+      if (familia.predio_core_id && !familia.es_practica) {
+        const userName = localStorage.getItem('ae_campo_user') ?? ''
+        const propio = await buscarDiligenciamientoPropio('familias', familia.predio_core_id, userName)
+        if (propio) {
+          alert(`Ya registraste una Encuesta Predial para "${familia.nombre_predio}" con el nombre "${userName}". No se puede crear otra — la puedes consultar en la pestaña "Todos".`)
+          navigate(`/ver/predial/${propio.id}`)
+          return
+        }
+      }
 
       const newEnc: EncuestaPredialRecord = {
         local_id:           crypto.randomUUID(),

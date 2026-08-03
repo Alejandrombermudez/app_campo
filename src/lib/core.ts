@@ -110,3 +110,26 @@ export async function getPredioIdentidad(predioId: string): Promise<PredioIdenti
   if (error || !data) return undefined
   return data
 }
+
+/**
+ * ¿Esta persona (created_by, tal cual quedó guardado en localStorage) ya tiene
+ * un formulario sincronizado de este tipo para este predio? Evita que la misma
+ * persona diligencie dos veces el mismo predio (p.ej. tras reinstalar la app o
+ * abrirla en otro dispositivo, donde no queda registro local del envío previo).
+ * Solo se puede verificar con internet — sin conexión no bloquea la creación.
+ */
+export async function buscarDiligenciamientoPropio(
+  tabla: 'evaluaciones_campo' | 'familias',
+  predioId: string,
+  createdBy: string,
+): Promise<{ id: string; created_at: string } | undefined> {
+  if (!navigator.onLine || !createdBy.trim()) return undefined
+  let query = supabase.schema('siembra').from(tabla)
+    .select('id, created_at')
+    .eq('predio_id', predioId)
+    .eq('created_by', createdBy.trim())
+  if (tabla === 'familias') query = query.is('deleted_at', null)
+  const { data, error } = await query.order('created_at', { ascending: true }).limit(1)
+  if (error || !data || data.length === 0) return undefined
+  return data[0]
+}
