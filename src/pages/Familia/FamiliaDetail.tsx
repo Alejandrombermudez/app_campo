@@ -4,9 +4,10 @@ import { ArrowLeft, ClipboardList, BarChart2, ChevronRight, CheckCircle, Clock, 
 import { db } from '../../db/schema'
 import type { FamiliaRecord } from '../../types/familia'
 import type { EvaluacionRecord, ZonaData } from '../../types/evaluacion'
+import { reconciliarZonas } from '../../types/evaluacion'
 import type { EncuestaPredialRecord, CultivoRow } from '../../types/encuesta'
 import type { RevisionRecord } from '../../types/revision'
-import { zonasActivas } from '../../lib/geo'
+import { zonasActivas, zonasVigentes } from '../../lib/geo'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const CULTIVOS_BASE = ['Café', 'Cacao', 'Caña de azúcar', 'Plátano', 'Yuca', 'Frutales', 'Madera']
@@ -56,11 +57,34 @@ export function FamiliaDetail() {
       db.evaluaciones.where('familia_local_id').equals(id).first(),
       db.encuestas.where('familia_local_id').equals(id).first(),
       db.revisiones.where('familia_local_id').equals(id).toArray(),
-    ]).then(([f, e, n, r]) => {
+    ]).then(async ([f, e, n, r]) => {
       setFamilia(f ?? null)
-      setCampoEval(e)
       setPredialEnc(n)
       setRevisiones(r)
+
+      // El número de zonas de la evaluación ya no queda fijo al abrirla: se
+      // recalcula contra el estado vigente del SIG cada vez que se vuelve a
+      // esta pantalla (p.ej. después de corregir/descartar zonas en el
+      // módulo SIG). Conserva datos ya capturados aunque una zona se descarte.
+      if (f && e) {
+        const vigentes = zonasVigentes(f, r)
+        const zonasReconciliadas = reconciliarZonas(e.zonas, vigentes)
+        if (JSON.stringify(zonasReconciliadas) !== JSON.stringify(e.zonas)) {
+          const actualizado: EvaluacionRecord = {
+            ...e,
+            zonas: zonasReconciliadas,
+            num_zonas: zonasReconciliadas.length,
+            updated_at: new Date().toISOString(),
+          }
+          await db.evaluaciones.put(actualizado)
+          setCampoEval(actualizado)
+        } else {
+          setCampoEval(e)
+        }
+      } else {
+        setCampoEval(e)
+      }
+
       setLoaded(true)
     })
   }, [id])
@@ -182,10 +206,11 @@ export function FamiliaDetail() {
   )
 
   // ─── Estado de cada formulario ───────────────────────────────────────────────
-  const totalCampo = evalStepsTotal(familia.num_zonas)
-
+  // El total de pasos sigue el número real de zonas de la evaluación (ya
+  // reconciliado contra el SIG), no familia.num_zonas — ese es un snapshot
+  // congelado de cuando se creó la familia, no se actualiza con el tiempo.
   const campoStatus: FormStatus = !campoEval ? 'pendiente'
-    : campoEval.step_completed >= totalCampo - 1 ? 'completo'
+    : campoEval.step_completed >= evalStepsTotal(campoEval.zonas.length) - 1 ? 'completo'
     : 'en_curso'
 
   const predialStatus: FormStatus = !predialEnc ? 'pendiente'
@@ -226,7 +251,7 @@ export function FamiliaDetail() {
             {familia.fecha && ` · ${new Date(familia.fecha + 'T00:00:00').toLocaleDateString('es-CO')}`}
           </p>
           <p className="text-xs text-gray-400">
-            {familia.num_zonas} zona{familia.num_zonas > 1 ? 's' : ''} de campo
+            {activas.length} zona{activas.length !== 1 ? 's' : ''} de campo vigente{activas.length !== 1 ? 's' : ''}
             {familia.created_by && ` · Creado por ${familia.created_by}`}
           </p>
         </div>

@@ -8,6 +8,8 @@ import type {
   SeccionCobertura, SeccionSuelo, SeccionLogistica,
   SeccionRiesgos, SeccionFirmas,
 } from '../../types/evaluacion'
+import { reconciliarZonas } from '../../types/evaluacion'
+import { zonasVigentes } from '../../lib/geo'
 import { ProgressBar } from '../../components/ui/ProgressBar'
 import { Step01 } from './Step01_Identificacion'
 import { Step02 } from './Step02_CartografiaSocial'
@@ -29,11 +31,12 @@ function buildSteps(zonas: ZonaData[]): StepDescriptor[] {
     { id: 'identificacion', label: '§1 Identificación' },
     { id: 'cartografia',    label: '§2 Cartografía Social' },
   ]
-  zonas.forEach((_, i) => {
+  zonas.forEach((zd, i) => {
     const z = i + 1
-    steps.push({ id: `cobertura_z${z}`, label: `§3 Cobertura — Zona ${z}`, zona: z })
-    steps.push({ id: `suelo_z${z}`,     label: `§4 Suelo — Zona ${z}`,     zona: z })
-    steps.push({ id: `logistica_z${z}`, label: `§5 Logística — Zona ${z}`, zona: z })
+    const sufijo = zd.descartada ? ' (descartada en SIG)' : ''
+    steps.push({ id: `cobertura_z${z}`, label: `§3 Cobertura — Zona ${z}${sufijo}`, zona: z })
+    steps.push({ id: `suelo_z${z}`,     label: `§4 Suelo — Zona ${z}${sufijo}`,     zona: z })
+    steps.push({ id: `logistica_z${z}`, label: `§5 Logística — Zona ${z}${sufijo}`, zona: z })
   })
   steps.push({ id: 'riesgos', label: '§6 Riesgos' })
   steps.push({ id: 'firmas',  label: 'Firmas' })
@@ -76,13 +79,38 @@ export function EvaluacionPage() {
   const [done, setDone]       = useState(false)
   const [loaded, setLoaded]   = useState(false)
 
-  // Cargar evaluación existente
+  // Cargar evaluación existente. Si viene de la familia (flujo SIG), se
+  // reconcilia contra el estado vigente del SIG por si se entró directo
+  // aquí (p.ej. desde una tarjeta de Home) sin pasar por FamiliaDetail,
+  // que es donde normalmente ya se reconcilió al volver del módulo SIG.
   useEffect(() => {
     if (!id) { setLoaded(true); return }
-    db.evaluaciones.where('local_id').equals(id).first().then(found => {
+    db.evaluaciones.where('local_id').equals(id).first().then(async found => {
       if (found) {
-        setEv(found)
-        setStepIdx(found.step_completed ?? 0)
+        let vigente = found
+        if (found.familia_local_id) {
+          const [familia, revisiones] = await Promise.all([
+            db.familias.where('local_id').equals(found.familia_local_id).first(),
+            db.revisiones.where('familia_local_id').equals(found.familia_local_id).toArray(),
+          ])
+          if (familia) {
+            const zonasReconciliadas = reconciliarZonas(found.zonas, zonasVigentes(familia, revisiones))
+            if (JSON.stringify(zonasReconciliadas) !== JSON.stringify(found.zonas)) {
+              vigente = {
+                ...found,
+                zonas: zonasReconciliadas,
+                num_zonas: zonasReconciliadas.length,
+                updated_at: new Date().toISOString(),
+              }
+              await db.evaluaciones.put(vigente)
+            }
+          }
+        }
+        setEv(vigente)
+        // Clamp: si el número de zonas bajó al reconciliar (zona descartada
+        // sin datos), el paso guardado puede haber quedado fuera de rango.
+        const totalVigente = buildSteps(vigente.zonas).length
+        setStepIdx(Math.min(vigente.step_completed ?? 0, totalVigente - 1))
       }
       setLoaded(true)
     })

@@ -84,6 +84,7 @@ Claves de arquitectura:
 7. **`codigo_predio`**: ¿es lo mismo que `core.predios.codigo_catastral`? Sin resolver — hoy se pregunta en la evaluación.
 8. Revisar la app vieja `familias-res/` (quedó desactualizada; decidir si se archiva).
 9. Kobo: migrar fotos históricas cuando vuelva (pendiente viejo, no de esta app).
+10. **Módulo legacy `Predio`** (`src/pages/Predio/`, rutas `/predio/nueva` y `/predio/:id`): tiene el dropdown manual "número de zonas" y crea zonas con `zona_id: null` — contradice la regla de "nunca fabricar zonas". Sin botón de acceso en la UI hoy, solo queda código muerto. Decidir si se retira (revisar antes si hay dispositivos con registros locales viejos en `db.predios`/`db.evaluaciones` sin sincronizar).
 
 ## 5. Cómo probar en local
 
@@ -100,3 +101,4 @@ cd app_campo && npm install && npm run dev   # puerto 5173; .env ya trae la anon
 - El RPC aplica el cambio DIRECTO a `geo.zonas` (estado `validada`, origen `campo`, version+1) — no hay cola de aprobación; la auditoría es `geo.zona_revision`.
 - Identidad/ubicación jamás se duplican en siembra.*: FKs a core + JOIN.
 - Dos dominios separados (Siembra=proceso vs RAS=conservación); esta app es SOLO del proceso de restauración.
+- **(2026-07-16) El número de repeticiones del formulario biofísico (§3-§5) es el número real de zonas vigentes, nunca un dato que se le pregunte al evaluador.** Se recalcula (`reconciliarZonas` en `types/evaluacion.ts`) contra `zonasVigentes()` cada vez que se vuelve a `FamiliaDetail` o se abre `/evaluacion/:id` directamente — no queda fijo en lo que había al crear la evaluación. Si una zona ya tiene datos capturados y se descarta en el SIG después, **se conserva marcada como descartada** (no se pierde el trabajo de campo); si no tenía datos, se omite sin más. El módulo legacy `Predio` (`/predio/...`, dropdown manual "1-20 zonas") sigue existiendo pero no tiene botón de acceso en la UI — no se tocó, sigue pendiente decidir si se retira (ver punto 10 abajo).
