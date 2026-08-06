@@ -10,8 +10,8 @@ import {
 } from 'lucide-react'
 import { db } from '../../db/schema'
 import type { FamiliaRecord } from '../../types/familia'
-import type { RevisionRecord } from '../../types/revision'
-import { newRevision } from '../../types/revision'
+import type { RevisionRecord, CambiosRevision } from '../../types/revision'
+import { newRevision, fusionarRevision } from '../../types/revision'
 import {
   zonasVigentes, parseGeom, areaHa, posicionRespectoZonas,
   centroZonas, distanciaTexto, type ZonaVigente,
@@ -242,17 +242,14 @@ export function SigPage() {
   // ─── Guardar revisiones (Dexie, offline-first) ──────────────────────────────
   // Si hay una revisión local PENDIENTE de la misma zona se actualiza (la última
   // acción gana); si ya está sincronizada, se crea una revisión nueva.
-  async function upsertRevision(z: ZonaVigente, cambios: {
-    accion: RevisionRecord['accion']
-    metodo: RevisionRecord['metodo']
-    geojson: string | null
-    area_ha: number | null
-  }) {
+  // La fusión la decide `fusionarRevision`: la última acción manda, pero una
+  // geometría ya corregida en terreno no se pierde nunca.
+  async function upsertRevision(z: ZonaVigente, cambios: CambiosRevision) {
     if (!familia?.predio_core_id) return
     const previa = z.revision && z.revision.sync_status !== 'synced' ? z.revision : null
     if (previa) {
       await db.revisiones.update(previa.id!, {
-        ...cambios,
+        ...fusionarRevision(previa, cambios),
         observaciones: obs,
         sync_status: 'pending',
         sync_error: null,
@@ -398,6 +395,13 @@ export function SigPage() {
 
   const et = zonaSel ? etiquetaRevision(zonaSel) : null
   const revPendiente = zonaSel?.revision && zonaSel.revision.sync_status !== 'synced'
+  // Corrección local ya guardada: no hay nada más que confirmar. "Confirmar"
+  // significa "la zona está bien tal como vino del SIG", así que ofrecerlo aquí
+  // solo confunde (y era lo que hacía creer que el cambio no se había guardado).
+  const yaCorregida = !!zonaSel?.revision
+    && zonaSel.revision.sync_status !== 'synced'
+    && !!zonaSel.revision.geojson
+    && (zonaSel.revision.accion === 'modificada' || zonaSel.revision.accion === 'nueva')
 
   return (
     <div className="h-screen flex flex-col bg-[#f0fafa]">
@@ -545,9 +549,9 @@ export function SigPage() {
               />
 
               <div className="grid grid-cols-3 gap-2">
-                <button onClick={confirmarZona} disabled={zonaSel.descartada}
+                <button onClick={confirmarZona} disabled={zonaSel.descartada || yaCorregida}
                   className="flex flex-col items-center gap-1 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold disabled:opacity-40">
-                  <Check size={16} /> Confirmar
+                  <Check size={16} /> {yaCorregida ? 'Ya corregida' : 'Confirmar'}
                 </button>
                 <button onClick={empezarEdicion} disabled={zonaSel.descartada}
                   className="flex flex-col items-center gap-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold disabled:opacity-40">
@@ -558,6 +562,14 @@ export function SigPage() {
                   <Trash2 size={16} /> Descartar
                 </button>
               </div>
+
+              {yaCorregida && (
+                <p className="text-[11px] text-blue-800 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 mt-2">
+                  El límite que dibujaste <strong>ya quedó guardado</strong> en este celular y se sube cuando
+                  haya señal. No hace falta confirmarlo aparte: "Confirmar" es solo para dejar una zona tal
+                  como vino del SIG. Si quieres volver al polígono original, usa "Deshacer".
+                </p>
+              )}
 
               {revPendiente && (
                 <button onClick={restaurarZona}

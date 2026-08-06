@@ -25,6 +25,54 @@ export interface RevisionRecord {
   updated_at: string
 }
 
+/** Lo que cambia una acción del módulo SIG sobre una zona. */
+export interface CambiosRevision {
+  accion: RevisionAccion
+  metodo: RevisionRecord['metodo']
+  geojson: string | null
+  area_ha: number | null
+}
+
+/**
+ * Qué queda cuando se actúa sobre una zona que YA tiene una revisión local
+ * pendiente. La última acción manda, pero una geometría corregida en terreno
+ * NUNCA se pierde por una acción posterior que no traiga geometría propia.
+ *
+ * Caso que lo motivó (reportado desde campo el 2026-08-06): corregir el
+ * límite, Guardar, y después pulsar "Confirmar" — que es lo natural, se lee
+ * como "confirmo mi corrección". Eso sobrescribía la revisión con geojson
+ * null y la zona volvía al polígono original del SIG; al sincronizar viajaba
+ * 'confirmada', que en el servidor solo marca estado='validada' sin escribir
+ * geometría, así que la corrección se perdía también en la nube.
+ *
+ * Confirmar una zona ya corregida NO la devuelve a la forma del SIG: la
+ * revisión sigue siendo 'modificada'/'nueva', que es la única acción con la
+ * que geo.revisar_zona escribe la geometría nueva en geo.zonas.
+ */
+export function fusionarRevision(
+  previa: RevisionRecord,
+  cambios: CambiosRevision,
+): CambiosRevision {
+  const traeGeometriaPropia =
+    !!previa.geojson && (previa.accion === 'modificada' || previa.accion === 'nueva')
+
+  if (cambios.accion === 'confirmada' && traeGeometriaPropia) {
+    return {
+      accion:  previa.accion,
+      metodo:  previa.metodo,
+      geojson: previa.geojson,
+      area_ha: previa.area_ha,
+    }
+  }
+
+  return {
+    ...cambios,
+    geojson: cambios.geojson ?? previa.geojson,
+    area_ha: cambios.area_ha ?? previa.area_ha,
+    metodo:  cambios.metodo  ?? previa.metodo,
+  }
+}
+
 export function newRevision(base: {
   familia_local_id: string
   predio_core_id: string
