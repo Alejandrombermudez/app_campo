@@ -142,6 +142,10 @@ function tieneDatos(z: ZonaData | undefined): boolean {
  *   (decisión del usuario: no perder trabajo de campo), marcada `descartada`.
  * - Zona vigente descartada SIN datos: se omite — nunca se le pidió nada al
  *   evaluador, no hay nada que conservar.
+ * - Zona que YA NO está en el SIG (la borró o la reemplazó, típicamente al
+ *   pulsar "Actualizar desde el SIG") pero que tiene datos capturados: se
+ *   conserva al final marcada `descartada`. Misma regla de siempre — el
+ *   trabajo de terreno no se pierde por un cambio hecho en la oficina.
  * - zona_numero se reasigna en orden secuencial (igual que zonasVigentes).
  */
 export function reconciliarZonas(actuales: ZonaData[], vigentes: ZonaVigente[]): ZonaData[] {
@@ -170,6 +174,20 @@ export function reconciliarZonas(actuales: ZonaData[], vigentes: ZonaVigente[]):
       descartada:         v.descartada,
       revision_local_id:  v.zona_id ? undefined : (v.revision?.local_id ?? null),
     })
+  }
+
+  // Red de seguridad: nada con datos capturados se cae de la lista aunque haya
+  // dejado de existir en el SIG (zona borrada/reemplazada en la oficina, o
+  // registro legacy sin zona_id). Sin esto, actualizar el predio desde el SIG
+  // podría borrar secciones §3-§5 ya diligenciadas en terreno.
+  const clavesVigentes = new Set(
+    vigentes.map(v => v.zona_id ?? v.revision?.local_id).filter(Boolean) as string[],
+  )
+  for (const z of actuales) {
+    const clave = z.zona_id ?? z.revision_local_id ?? null
+    if (clave && clavesVigentes.has(clave)) continue
+    if (!tieneDatos(z)) continue
+    resultado.push({ ...z, zona_numero: numero++, descartada: true })
   }
 
   return resultado

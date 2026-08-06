@@ -21,6 +21,13 @@ export interface ZonaVigente {
   estado_sig: string            // estado en geo.zonas al descargar
   revision: RevisionRecord | null   // última revisión local (si existe)
   descartada: boolean
+  /**
+   * La zona ya no viene en el snapshot del SIG (el SIG la borró, la descartó o
+   * la reemplazó por otra), pero campo alcanzó a trabajarla. Se mantiene
+   * visible y marcada — nunca desaparece en silencio. No se evalúa
+   * (`zonasActivas` la excluye igual que a una descartada).
+   */
+  retirada_del_sig?: boolean
 }
 
 /**
@@ -51,9 +58,9 @@ export function zonasVigentes(familia: FamiliaRecord, revisiones: RevisionRecord
     }
   })
 
-  const extra: ZonaVigente[] = nuevas.map((r, i) => ({
+  const extra: ZonaVigente[] = nuevas.map(r => ({
     zona_id:     r.zona_id,
-    zona_numero: base.length + i + 1,
+    zona_numero: 0,   // se renumera abajo
     nombre:      null,
     geojson:     r.geojson ?? '',
     area_ha:     r.area_ha,
@@ -62,7 +69,26 @@ export function zonasVigentes(familia: FamiliaRecord, revisiones: RevisionRecord
     descartada:  false,
   }))
 
-  return [...base, ...extra]
+  // Zonas con trabajo de campo que ya NO están en el snapshot del SIG: pasa
+  // cuando el SIG rehace las zonas de siembra y el técnico actualiza el predio
+  // en la app. No se borran ni se ocultan — quedan marcadas como retiradas
+  // para que se vea qué se trabajó sobre algo que el SIG ya cambió.
+  const idsEnSig = new Set(familia.zonas_sig.map(z => z.zona_id))
+  const huerfanas: ZonaVigente[] = [...porZona.entries()]
+    .filter(([zonaId]) => !idsEnSig.has(zonaId))
+    .map(([zonaId, r]) => ({
+      zona_id:          zonaId,
+      zona_numero:      0,
+      nombre:           null,
+      geojson:          r.geojson ?? '',
+      area_ha:          r.area_ha,
+      estado_sig:       'retirada',
+      revision:         r,
+      descartada:       true,
+      retirada_del_sig: true,
+    }))
+
+  return [...base, ...extra, ...huerfanas].map((z, i) => ({ ...z, zona_numero: i + 1 }))
 }
 
 /** Zonas activas (sin descartadas) — lo que la evaluación de campo debe recorrer. */

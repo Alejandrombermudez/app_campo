@@ -101,4 +101,26 @@ cd app_campo && npm install && npm run dev   # puerto 5173; .env ya trae la anon
 - El RPC aplica el cambio DIRECTO a `geo.zonas` (estado `validada`, origen `campo`, version+1) — no hay cola de aprobación; la auditoría es `geo.zona_revision`.
 - Identidad/ubicación jamás se duplican en siembra.*: FKs a core + JOIN.
 - Dos dominios separados (Siembra=proceso vs RAS=conservación); esta app es SOLO del proceso de restauración.
+- **(2026-08-05) Campo tiene la última palabra, y el SIG versiona en vez de borrar.**
+  `migration_geo_versionado.sql` (⚠️ pendiente de correr, ver `docs/sql/pending.sql`). El SIG destruía:
+  `modo='sobreescribir'` hacía `DELETE` de `geo.zonas` y `crear_zona_union` también, así que los `zona_id`
+  que el celular ya tenía dejaban de existir y `geo.revisar_zona` levantaba `'La zona X no existe'` — la
+  corrección hecha en terreno **no se podía aplicar nunca**. Ahora cada subida es un lote con versión
+  (`geo.zonas_lote`), lo anterior queda `vigente=false` (consultable como respaldo, `geo.zonas_historial`),
+  y el RPC nunca falla: revive la zona retirada o la recrea con `p_geojson_respaldo` (la copia que manda el
+  celular). `cerrar_lote` **no retira** zonas que campo ya trabajó — las deja vigentes y marcadas en
+  `geo.v_zonas_conflicto` para que el SIG resuelva en la oficina viendo las dos versiones. Regla de fondo:
+  la oficina propone, el terreno dispone; ninguna versión se destruye.
+- **(2026-08-05) El predio descargado se puede re-sincronizar contra el SIG con un botón, en dos pasos.**
+  Caso que lo motivó: el SIG subió el predio, campo lo descargó, y después el SIG cambió el límite de la
+  finca y las zonas de siembra. `lib/actualizarSig.ts` + `components/ui/ActualizarSig.tsx`: el primer toque
+  **solo consulta** (arma un resumen de qué cambiaría, no escribe nada en el dispositivo) y el segundo
+  aplica. Sin internet el botón está deshabilitado; con `navigator.onLine === true` pero sin datos reales,
+  la consulta falla (timeout 20 s) y tampoco escribe — un toque por error en terreno es inofensivo.
+  Garantías verificadas end-to-end contra la BD real (predio "La Dalia", 2026-08-05): aplicar solo
+  reemplaza `zonas_sig`/`zonas_finca`/identidad en `db.familias`; revisiones, evaluaciones, encuestas y
+  fotos quedan intactas; una zona que el SIG retiró y ya tenía datos capturados se conserva en la
+  evaluación marcada `descartada` y visible en el módulo SIG como "Retirada por el SIG". De paso se cerró
+  un agujero real: `fetchZonasPredio` devolvía `{siembra: [], finca: []}` cuando fallaba la red, así que
+  cualquiera que la llamara podía sobrescribir el snapshot con cero zonas — ahora lanza.
 - **(2026-07-16) El número de repeticiones del formulario biofísico (§3-§5) es el número real de zonas vigentes, nunca un dato que se le pregunte al evaluador.** Se recalcula (`reconciliarZonas` en `types/evaluacion.ts`) contra `zonasVigentes()` cada vez que se vuelve a `FamiliaDetail` o se abre `/evaluacion/:id` directamente — no queda fijo en lo que había al crear la evaluación. Si una zona ya tiene datos capturados y se descarta en el SIG después, **se conserva marcada como descartada** (no se pierde el trabajo de campo); si no tenía datos, se omite sin más. El módulo legacy `Predio` (`/predio/...`, dropdown manual "1-20 zonas") sigue existiendo pero no tiene botón de acceso en la UI — no se tocó, sigue pendiente decidir si se retira (ver punto 10 abajo).

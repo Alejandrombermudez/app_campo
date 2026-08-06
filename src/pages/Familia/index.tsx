@@ -1,34 +1,22 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useCallback, useEffect, useState, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Search, RefreshCw, MapPin, Loader2, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Search, MapPin, Loader2, CheckCircle2 } from 'lucide-react'
 import { db } from '../../db/schema'
 import { newFamiliaDesdeHabilitado } from '../../types/familia'
 import type { FamiliaRecord } from '../../types/familia'
 import type { PredioHabilitado } from '../../types/core'
-import { refreshPrediosHabilitados, getPrediosHabilitadosCache, fetchZonasPredio } from '../../lib/core'
+import { refreshPrediosHabilitados, getPrediosHabilitadosCache } from '../../lib/core'
 import { useOnlineStatus } from '../../lib/useOnlineStatus'
+import { ActualizarSigCard } from '../../components/ui/ActualizarSig'
 
 // ─── Modo "editar": ficha de solo lectura del predio (viene de Jurídica+SIG) ──
-function FichaPredio({ familia, onBack }: { familia: FamiliaRecord; onBack: () => void }) {
-  const online = useOnlineStatus()
-  const [refreshing, setRefreshing] = useState(false)
-
-  async function handleRefreshZonas() {
-    if (!familia.predio_core_id || !online || familia.es_practica) return
-    setRefreshing(true)
-    try {
-      const { siembra, finca } = await fetchZonasPredio(familia.predio_core_id)
-      await db.familias.update(familia.id!, {
-        zonas_sig:   siembra,
-        zonas_finca: finca,
-        num_zonas:   siembra.length,
-        updated_at:  new Date().toISOString(),
-      })
-    } finally {
-      setRefreshing(false)
-    }
-  }
-
+function FichaPredio({
+  familia, onBack, onActualizado,
+}: {
+  familia: FamiliaRecord
+  onBack: () => void
+  onActualizado: () => void | Promise<void>
+}) {
   return (
     <div className="min-h-screen flex flex-col bg-[#f0fafa]">
       <header className="bg-[#0d7377] text-white px-4 py-3 flex items-center gap-3">
@@ -65,13 +53,7 @@ function FichaPredio({ familia, onBack }: { familia: FamiliaRecord; onBack: () =
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Zonas del SIG</p>
-            <button onClick={handleRefreshZonas} disabled={refreshing || !online || familia.es_practica}
-              className="flex items-center gap-1 text-xs font-semibold text-[#0d7377] disabled:opacity-40">
-              <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} /> Actualizar
-            </button>
-          </div>
+          <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Zonas del SIG</p>
           {familia.zonas_sig.length === 0 ? (
             <p className="text-sm text-gray-500">El SIG aún no ha subido zonas potenciales para este predio.</p>
           ) : (
@@ -85,6 +67,10 @@ function FichaPredio({ familia, onBack }: { familia: FamiliaRecord; onBack: () =
             </ul>
           )}
         </div>
+
+        {/* Traer el estado actual del SIG (dos toques y con resumen previo:
+            ver components/ui/ActualizarSig.tsx) */}
+        <ActualizarSigCard familia={familia} onActualizado={onActualizado} />
       </main>
     </div>
   )
@@ -254,13 +240,14 @@ export function FamiliaPage() {
   const [familia, setFamilia] = useState<FamiliaRecord | null>(null)
   const [loaded, setLoaded]   = useState(!isEdit)
 
-  useEffect(() => {
+  const cargar = useCallback(async () => {
     if (!isEdit) return
-    db.familias.where('local_id').equals(id!).first().then(found => {
-      setFamilia(found ?? null)
-      setLoaded(true)
-    })
+    const found = await db.familias.where('local_id').equals(id!).first()
+    setFamilia(found ?? null)
+    setLoaded(true)
   }, [id, isEdit])
+
+  useEffect(() => { cargar() }, [cargar])
 
   if (!isEdit) return <SelectorPredios />
 
@@ -277,5 +264,5 @@ export function FamiliaPage() {
     </div>
   )
 
-  return <FichaPredio familia={familia} onBack={() => navigate(`/familia/${id}`)} />
+  return <FichaPredio familia={familia} onBack={() => navigate(`/familia/${id}`)} onActualizado={cargar} />
 }

@@ -33,6 +33,7 @@ function estiloZona(z: ZonaVigente, seleccionada: boolean): L.PathOptions {
   if (z.revision?.accion === 'modificada')  color = '#3b82f6'
   if (z.revision?.accion === 'nueva')       color = '#14b8a6'
   if (z.descartada)                         color = '#ef4444'
+  if (z.retirada_del_sig)                   color = '#9ca3af'   // ya no existe en el SIG
   return {
     color,
     weight: seleccionada ? 5 : 3,
@@ -43,6 +44,7 @@ function estiloZona(z: ZonaVigente, seleccionada: boolean): L.PathOptions {
 }
 
 function etiquetaRevision(z: ZonaVigente): { txt: string; cls: string } {
+  if (z.retirada_del_sig)                  return { txt: 'Retirada por el SIG', cls: 'bg-gray-200 text-gray-600' }
   if (z.descartada)                        return { txt: 'Descartada',        cls: 'bg-red-100 text-red-700' }
   if (z.revision?.accion === 'confirmada') return { txt: 'Confirmada',        cls: 'bg-emerald-100 text-emerald-700' }
   if (z.revision?.accion === 'modificada') return { txt: 'Corregida',         cls: 'bg-blue-100 text-blue-700' }
@@ -523,6 +525,13 @@ export function SigPage() {
 
               {posicion?.dentroDe?.zona_numero === zonaSel.zona_numero && (
                 <p className="text-xs text-emerald-700 font-semibold mb-2">✓ Estás parado dentro de esta zona</p>
+              )}
+
+              {zonaSel.retirada_del_sig && (
+                <p className="text-xs text-gray-600 bg-gray-100 rounded-lg px-3 py-2 mb-2">
+                  El SIG cambió esta zona y ya no la incluye. Lo que trabajaste aquí se conserva tal cual, pero no
+                  se le piden más datos — trabaja sobre las zonas vigentes.
+                </p>
               )}
 
               <textarea

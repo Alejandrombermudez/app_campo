@@ -36,6 +36,11 @@ export interface FamiliaRecord {
 
   fecha: string   // fecha de la visita/encuesta — esto sí lo define el encuestador
 
+  // Última vez que se contrastó el snapshot de zonas contra el SIG con el
+  // botón "Actualizar desde el SIG" (lib/actualizarSig.ts). null = nunca,
+  // sigue con lo que se descargó al abrir el predio.
+  sig_actualizado_at?: string | null
+
   // Predio de práctica para capacitación (ver lib/practica.ts): no representa
   // un predio real, nunca se sincroniza a Supabase (ver guards en lib/sync.ts).
   es_practica?:       boolean

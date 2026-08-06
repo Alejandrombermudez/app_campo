@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, ClipboardList, BarChart2, ChevronRight, CheckCircle, Clock, AlertCircle, Loader2, Pencil, Satellite } from 'lucide-react'
 import { db } from '../../db/schema'
@@ -9,6 +9,7 @@ import type { EncuestaPredialRecord, CultivoRow } from '../../types/encuesta'
 import type { RevisionRecord } from '../../types/revision'
 import { zonasActivas, zonasVigentes } from '../../lib/geo'
 import { buscarDiligenciamientoPropio } from '../../lib/core'
+import { ActualizarSigCard } from '../../components/ui/ActualizarSig'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const CULTIVOS_BASE = ['Café', 'Cacao', 'Caña de azúcar', 'Plátano', 'Yuca', 'Frutales', 'Madera']
@@ -51,44 +52,46 @@ export function FamiliaDetail() {
   const [loaded,     setLoaded]     = useState(false)
   const [creating,   setCreating]   = useState(false)
 
-  useEffect(() => {
+  const cargar = useCallback(async () => {
     if (!id) return
-    Promise.all([
+    const [f, e, n, r] = await Promise.all([
       db.familias.where('local_id').equals(id).first(),
       db.evaluaciones.where('familia_local_id').equals(id).first(),
       db.encuestas.where('familia_local_id').equals(id).first(),
       db.revisiones.where('familia_local_id').equals(id).toArray(),
-    ]).then(async ([f, e, n, r]) => {
-      setFamilia(f ?? null)
-      setPredialEnc(n)
-      setRevisiones(r)
+    ])
+    setFamilia(f ?? null)
+    setPredialEnc(n)
+    setRevisiones(r)
 
-      // El número de zonas de la evaluación ya no queda fijo al abrirla: se
-      // recalcula contra el estado vigente del SIG cada vez que se vuelve a
-      // esta pantalla (p.ej. después de corregir/descartar zonas en el
-      // módulo SIG). Conserva datos ya capturados aunque una zona se descarte.
-      if (f && e) {
-        const vigentes = zonasVigentes(f, r)
-        const zonasReconciliadas = reconciliarZonas(e.zonas, vigentes)
-        if (JSON.stringify(zonasReconciliadas) !== JSON.stringify(e.zonas)) {
-          const actualizado: EvaluacionRecord = {
-            ...e,
-            zonas: zonasReconciliadas,
-            num_zonas: zonasReconciliadas.length,
-            updated_at: new Date().toISOString(),
-          }
-          await db.evaluaciones.put(actualizado)
-          setCampoEval(actualizado)
-        } else {
-          setCampoEval(e)
+    // El número de zonas de la evaluación ya no queda fijo al abrirla: se
+    // recalcula contra el estado vigente del SIG cada vez que se vuelve a
+    // esta pantalla (p.ej. después de corregir/descartar zonas en el
+    // módulo SIG, o de actualizar el predio desde el SIG). Conserva datos ya
+    // capturados aunque una zona se descarte o el SIG la retire.
+    if (f && e) {
+      const vigentes = zonasVigentes(f, r)
+      const zonasReconciliadas = reconciliarZonas(e.zonas, vigentes)
+      if (JSON.stringify(zonasReconciliadas) !== JSON.stringify(e.zonas)) {
+        const actualizado: EvaluacionRecord = {
+          ...e,
+          zonas: zonasReconciliadas,
+          num_zonas: zonasReconciliadas.length,
+          updated_at: new Date().toISOString(),
         }
+        await db.evaluaciones.put(actualizado)
+        setCampoEval(actualizado)
       } else {
         setCampoEval(e)
       }
+    } else {
+      setCampoEval(e)
+    }
 
-      setLoaded(true)
-    })
+    setLoaded(true)
   }, [id])
+
+  useEffect(() => { cargar() }, [cargar])
 
   // Zonas que se evaluarán en terreno: las del SIG + correcciones locales
   // (módulo SIG), sin las descartadas.
@@ -279,6 +282,9 @@ export function FamiliaDetail() {
             {familia.created_by && ` · Creado por ${familia.created_by}`}
           </p>
         </div>
+
+        {/* Traer del SIG el límite del predio y las zonas como están hoy */}
+        <ActualizarSigCard familia={familia} onActualizado={cargar} />
 
         {/* Formularios hijos */}
         <p className="text-xs font-bold uppercase tracking-widest text-gray-400 px-1">Formularios</p>

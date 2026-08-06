@@ -37,6 +37,32 @@ el trabajo); si no tenía datos, se omite. Existe un módulo legacy (`src/pages/
 en la UI) que sí tiene un dropdown manual de "número de zonas" y fabrica zonas en blanco — no se tocó, ver
 `CONTEXTO_APP_CAMPO.md` punto 10 del backlog.
 
+## "Actualizar desde el SIG" (2026-08-05) — el snapshot se refresca sin destruir nada
+
+Un predio se descarga como **snapshot** (`familia.zonas_sig` / `zonas_finca`); si el SIG rehace el límite
+o las zonas después, la app no se entera sola. El botón vive en `components/ui/ActualizarSig.tsx` sobre
+`lib/actualizarSig.ts` y siempre son **dos pasos**: `consultarCambiosSig` (solo lee y arma el diff — un
+toque por error no escribe nada) y `aplicarCambiosSig` (escribe, ya confirmado el resumen). Sin señal el
+botón está deshabilitado; con señal falsa (antena sin datos) la consulta falla con timeout de 20 s y no
+escribe.
+
+El servidor tampoco destruye: cada subida del SIG es un **lote versionado** (`geo.zonas_lote`, backup 1,
+2, 3...) y lo anterior queda `vigente=false`, no borrado — `migration_geo_versionado.sql`. Por eso
+`geo.revisar_zona` ya nunca falla porque el SIG haya cambiado algo: si la zona fue retirada la **revive**,
+y si el SIG la borró de raíz la **recrea** con la geometría de respaldo que manda el propio celular
+(`p_geojson_respaldo`, ver `syncPendingRevisiones`). El RPC puede devolver un `zona_id` distinto al
+enviado: ese es el bueno, y `remapearZonaId` reapunta familia + evaluación + revisiones.
+
+Invariantes que **no** se pueden romper al tocar esto:
+- `fetchZonasPredio` **lanza** si la consulta falla — nunca devuelve `[]` por un error de red. Una lista
+  vacía significa "el SIG no tiene zonas" y sobrescribir el snapshot con eso borraría el trabajo de campo.
+  Por lo mismo `refreshPrediosHabilitados` no hace `clear()` si la descarga se cayó a mitad, y aplicar se
+  bloquea si el SIG responde cero zonas.
+- Aplicar solo reemplaza geometrías + identidad en `db.familias`. Jamás toca `revisiones`, `evaluaciones`,
+  `encuestas` ni `photos`.
+- Una zona que desaparece del SIG con trabajo hecho encima **no se borra**: `zonasVigentes` la conserva
+  visible (`retirada_del_sig`) y `reconciliarZonas` mantiene sus datos marcados `descartada`.
+
 ## Reglas
 
 - No ejecutar DDL. Migraciones en `../Intranet-AE/docs/sql/`, las corre el usuario.

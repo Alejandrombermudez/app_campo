@@ -118,6 +118,45 @@ async function uploadSignature(dataURL: string, localId: string, role: string): 
   return data.publicUrl
 }
 
+// ─── Respaldo y remapeo de zonas que el SIG cambió por debajo ────────────────
+
+/** La geometría que este celular tiene guardada para una zona (su respaldo). */
+async function geojsonLocalDeZona(
+  familiaLocalId: string, zonaId: string | null,
+): Promise<string | null> {
+  if (!zonaId) return null
+  const fam = await db.familias.where('local_id').equals(familiaLocalId).first()
+  return fam?.zonas_sig.find(z => z.zona_id === zonaId)?.geojson ?? null
+}
+
+/**
+ * El servidor tuvo que recrear la zona con otro id (el SIG la había borrado):
+ * se reapunta todo lo local que la referenciaba, para que la evaluación no
+ * quede con un zona_id colgado.
+ */
+async function remapearZonaId(
+  familiaLocalId: string, viejo: string, nuevo: string,
+): Promise<void> {
+  const fam = await db.familias.where('local_id').equals(familiaLocalId).first()
+  if (fam?.zonas_sig.some(z => z.zona_id === viejo)) {
+    await db.familias.update(fam.id!, {
+      zonas_sig: fam.zonas_sig.map(z => z.zona_id === viejo ? { ...z, zona_id: nuevo } : z),
+    })
+  }
+
+  for (const ev of await db.evaluaciones.where('familia_local_id').equals(familiaLocalId).toArray()) {
+    if (!ev.zonas.some(z => z.zona_id === viejo)) continue
+    await db.evaluaciones.update(ev.id!, {
+      zonas: ev.zonas.map(z => z.zona_id === viejo ? { ...z, zona_id: nuevo } : z),
+    })
+  }
+
+  for (const r of await db.revisiones.where('familia_local_id').equals(familiaLocalId).toArray()) {
+    if (r.zona_id !== viejo) continue
+    await db.revisiones.update(r.id!, { zona_id: nuevo })
+  }
+}
+
 // ─── Sincronizar revisiones de zonas (SIG II) → RPC geo.revisar_zona ─────────
 // Idempotente: el RPC ignora local_id repetidos, así que reintentar es seguro.
 export async function syncPendingRevisiones(): Promise<{ synced: number; errors: number }> {
@@ -137,7 +176,13 @@ export async function syncPendingRevisiones(): Promise<{ synced: number; errors:
         synced++
         continue
       }
-      const { data: zonaId, error } = await supabase.schema('geo').rpc('revisar_zona', {
+      // Geometría de respaldo: la que el celular tenía guardada para esta
+      // zona. Si el SIG borró la zona en la oficina, el servidor la recrea
+      // con esta copia en vez de rechazar la revisión — el celular es la
+      // última palabra sobre dónde sí y dónde no (migration_geo_versionado).
+      const respaldo = await geojsonLocalDeZona(rev.familia_local_id, rev.zona_id)
+
+      const args = {
         p_local_id:      rev.local_id,
         p_predio_id:     rev.predio_core_id,
         p_accion:        rev.accion,
@@ -147,17 +192,35 @@ export async function syncPendingRevisiones(): Promise<{ synced: number; errors:
         p_evaluador:     rev.created_by || null,
         p_metodo:        rev.metodo,
         p_fecha:         rev.fecha || null,
-      })
+      }
+
+      let { data: zonaId, error } = await supabase.schema('geo')
+        .rpc('revisar_zona', { ...args, p_geojson_respaldo: respaldo })
+
+      // Si el servidor todavía tiene la firma vieja de 9 argumentos
+      // (migration_geo_versionado.sql sin correr), reintentar sin el respaldo
+      // en vez de dejar la revisión atascada.
+      if (error && (error.code === 'PGRST202' || /function .*revisar_zona/i.test(error.message ?? ''))) {
+        ({ data: zonaId, error } = await supabase.schema('geo').rpc('revisar_zona', args))
+      }
+
       if (error) {
         const supMsg = [error.message, error.details, error.hint, error.code]
           .filter(Boolean).join(' | ')
         throw new Error(supMsg || JSON.stringify(error))
       }
 
+      // El servidor puede devolver un id distinto al que mandamos: pasa cuando
+      // tuvo que recrear una zona que el SIG había borrado. Ese es el id bueno.
+      const idAplicado = (zonaId as string | null) ?? rev.zona_id
+      if (idAplicado && rev.zona_id && idAplicado !== rev.zona_id) {
+        await remapearZonaId(rev.familia_local_id, rev.zona_id, idAplicado)
+      }
+
       await db.revisiones.update(rev.id!, {
         sync_status: 'synced',
         sync_error:  null,
-        zona_id:     rev.zona_id ?? (zonaId as string | null),
+        zona_id:     idAplicado,
         updated_at:  new Date().toISOString(),
       })
       familiasTocadas.add(rev.familia_local_id)
