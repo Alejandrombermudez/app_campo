@@ -63,9 +63,25 @@ Invariantes que **no** se pueden romper al tocar esto:
 - Una zona que desaparece del SIG con trabajo hecho encima **no se borra**: `zonasVigentes` la conserva
   visible (`retirada_del_sig`) y `reconciliarZonas` mantiene sus datos marcados `descartada`.
 
+## Una geometría corregida en terreno no se pierde por una acción posterior
+
+Bug real reportado desde campo (2026-08-06, arreglado el 11): se corrige el polígono, se guarda, y al
+pulsar **"Confirmar"** —que se lee como "confirmo mi corrección"— la zona volvía a su forma original.
+`confirmarZona()` manda `geojson: null` y `upsertRevision` sobrescribía la revisión pendiente con todo lo
+recibido, nulos incluidos; como `zonasVigentes` resuelve `rev.geojson ?? z.geojson`, el mapa caía de vuelta
+al polígono del SIG. Y al sincronizar viajaba `confirmada`, que en el servidor solo pone `estado='validada'`
+sin escribir geometría: la corrección se perdía también en la nube.
+
+La fusión vive ahora en `fusionarRevision` (`types/revision.ts`), función pura: la última acción manda,
+**pero una geometría corregida nunca se pierde por una acción posterior que no traiga geometría propia**.
+Confirmar una zona ya corregida la deja en `modificada` — la única acción con la que `geo.revisar_zona`
+escribe la geometría nueva. En la UI, una zona con corrección local pendiente muestra "Ya corregida"
+(deshabilitado) en vez de ofrecer el botón que la destruía.
+
 ## Reglas
 
 - No ejecutar DDL. Migraciones en `../Intranet-AE/docs/sql/`, las corre el usuario.
-- `migration_zona_revision.sql` **ya se corrió** (verificado por REST 2026-07-28: `geo.zona_revision` y el RPC `geo.revisar_zona` existen, anon puede ejecutarlo) — las correcciones de zonas hechas en campo ya sincronizan.
+- `migration_zona_revision.sql` **ya se corrió** (2026-07-28) y `migration_geo_versionado.sql` también (2026-08-11, verificado por REST el 12: `geo.zonas_lote` existe, `revisar_zona` con 10 argumentos sin sobrecarga duplicada). Las correcciones de zonas hechas en campo sincronizan.
+- **Esta app es productiva con gente real usándola.** Al 2026-08-12: 2 predios en campo (La Dalia y Versalles), 27 revisiones de zonas sincronizadas, evaluadores "José Jarlinson vega" y "Natalia". Antes de tocar el flujo de sincronización, ten presente que hay trabajo de terreno en juego.
 - `.env` trae la anon key (gitignored) — no hay service role aquí, esta app no la necesita.
 - Local: `npm install && npm run dev` (puerto 5173). Type-check: `tsc -b --noEmit`. Build: `npm run build`.

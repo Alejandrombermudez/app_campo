@@ -1,7 +1,9 @@
 # Contexto — App de Campo (app_campo)
 
 > **Documento de traspaso entre sesiones.** Qué es esta app, qué se hizo, qué falta y cómo retomar.
-> Última actualización: 2026-07-08. Escrito al cierre de la sesión que reconectó la app al núcleo `core` y construyó el módulo SIG.
+> Última actualización: **2026-08-12** — sesión que agregó "Actualizar desde el SIG", arregló la pérdida de
+> correcciones al confirmar, y llevó los resultados de campo a la intranet. La app está **en uso productivo**.
+> Base anterior: 2026-07-08 (reconexión al núcleo `core` + construcción del módulo SIG).
 >
 > Documentos maestros del ecosistema (en `Intranet-AE/docs/`): `EMPEZAR_AQUI.md` (índice), `ARQUITECTURA_DATOS.md` (ER y parámetros de todo — **leer primero**), `ARTICULACION_Y_PROYECCION.md`.
 
@@ -75,12 +77,28 @@ Claves de arquitectura:
 
 ## 4. Qué falta (en orden sugerido)
 
-1. **Correr `migration_zona_revision.sql`** si aún no se hizo (verificar: `select to_regclass('geo.zona_revision')`).
-2. **Prueba E2E real**: un expediente completo Jurídica → Enviar a SIG → subir shapefiles → Enviar a Campo → abrirlo en la app (con login M365 en intranet y un celular real para GPS). Nada de esto se ha probado con usuario final.
+1. ~~Correr `migration_zona_revision.sql`~~ ✅ corrida 2026-07-28. `migration_geo_versionado.sql` ✅ corrida 2026-08-11.
+2. ~~**Prueba E2E real**~~ ✅ **La app está en uso productivo.** Al 2026-08-12: 2 predios en campo (La Dalia,
+   Versalles), 27 revisiones sincronizadas, evaluadores "José Jarlinson vega" y "Natalia". El ciclo completo
+   Jurídica → SIG → Campo → SIG II → intranet está andando con gente real.
+   Pendientes operativos detectados al revisar los datos (2026-08-12), **no son bugs de código**:
+   - La evaluación de campo de La Dalia se diligenció cuando el predio tenía **1 zona**; hoy tiene 3 activas,
+     así que al reabrirla pasará de "Completo" a "En curso" y pedirá §3-§5 de las otras dos. Es la regla de
+     zonas derivadas funcionando, pero conviene avisarle al evaluador.
+   - La **encuesta predial de Versalles está en cero** (`step_completed: 0`, creada el 29 de julio y nunca
+     avanzó). La de La Dalia sí está completa.
+   - El nombre del evaluador aparece con dos grafías: **"José Jarlinson vega"** en los formularios y
+     **"Jose Jarlinson"** en las revisiones. El candado que impide diligenciar dos veces el mismo predio
+     compara ese texto exacto (`buscarDiligenciamientoPropio`), así que no lo reconoce como la misma persona.
+     Vale estandarizar cómo lo escribe en el celular.
+   - Versalles quedó con **2 zonas activas de 9** (7 descartadas). Si descartan las dos que quedan, el predio
+     **desaparece del selector**: `core.v_predios_campo` exige al menos una zona no descartada.
 3. **Mapa base offline (PMTiles)**: hoy sin señal los polígonos y el GPS funcionan pero el fondo satelital no carga. Decisión ya tomada en docs: PMTiles sirve para el geovisor Y como mapa offline de campo.
 4. **Modo "caminar con GPS"**: dibujar/corregir zona grabando el track del técnico (decisión abierta en `ARQUITECTURA_DATOS.md`; hoy solo edición por vértices).
 5. **Foto por zona en el módulo SIG** (el diseño de `zona_revision` contemplaba `foto_url`; la columna no se incluyó — agregar cuando se implemente captura).
-6. **Deploy de app_campo** (hay `vercel.json`; falta conectar el repo a Vercel o donde se decida) y probar la PWA instalada.
+6. ~~**Deploy de app_campo**~~ ✅ desplegada y en uso (repo `github.com/Alejandrombermudez/app_campo`, push a `main`).
+   Ojo con el service worker: tras un despliegue, si el celular sigue mostrando la versión vieja hay que
+   cerrar la app del todo y reabrirla.
 7. **`codigo_predio`**: ¿es lo mismo que `core.predios.codigo_catastral`? Sin resolver — hoy se pregunta en la evaluación.
 8. Revisar la app vieja `familias-res/` (quedó desactualizada; decidir si se archiva).
 9. Kobo: migrar fotos históricas cuando vuelva (pendiente viejo, no de esta app).
@@ -101,6 +119,16 @@ cd app_campo && npm install && npm run dev   # puerto 5173; .env ya trae la anon
 - El RPC aplica el cambio DIRECTO a `geo.zonas` (estado `validada`, origen `campo`, version+1) — no hay cola de aprobación; la auditoría es `geo.zona_revision`.
 - Identidad/ubicación jamás se duplican en siembra.*: FKs a core + JOIN.
 - Dos dominios separados (Siembra=proceso vs RAS=conservación); esta app es SOLO del proceso de restauración.
+- **(2026-08-11) Confirmar una zona ya corregida NO la devuelve a la forma del SIG.** Bug reportado desde
+  terreno: corregir el polígono → Guardar → "Confirmar" (que se lee como "confirmo mi corrección") borraba
+  la geometría. `confirmarZona()` manda `geojson: null` y `upsertRevision` sobrescribía la revisión
+  pendiente con los nulos; como `zonasVigentes` hace `rev.geojson ?? z.geojson`, el mapa volvía al polígono
+  original, y al sincronizar viajaba `confirmada` (que en el servidor no escribe geometría), así que la
+  corrección se perdía también en la nube. La fusión pasó a `fusionarRevision` en `types/revision.ts`:
+  la última acción manda, pero una geometría corregida nunca se pierde por una acción posterior sin
+  geometría propia. En la UI la zona corregida muestra "Ya corregida" deshabilitado.
+  **Las correcciones que se perdieron antes del arreglo no son recuperables** (quedaron sin geometría tanto
+  en el celular como en `geom_corregida`) — hay que rehacerlas en terreno.
 - **(2026-08-05) Campo tiene la última palabra, y el SIG versiona en vez de borrar.**
   `migration_geo_versionado.sql` (⚠️ pendiente de correr, ver `docs/sql/pending.sql`). El SIG destruía:
   `modo='sobreescribir'` hacía `DELETE` de `geo.zonas` y `crear_zona_union` también, así que los `zona_id`
