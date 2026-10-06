@@ -19,7 +19,8 @@ import {
 } from '../lib/sync'
 import { useOnlineStatus } from '../lib/useOnlineStatus'
 import { evalTable, encTable } from '../lib/supabase'
-import { refreshPrediosHabilitados } from '../lib/core'
+import { refreshPrediosHabilitados, getPrediosHabilitadosCache } from '../lib/core'
+import { sigCambioRespectoA } from '../lib/actualizarSig'
 import { crearFamiliaPractica } from '../lib/practica'
 import { InstallBanner } from '../components/ui/InstallBanner'
 import { UserSetup } from '../components/ui/UserSetup'
@@ -102,11 +103,13 @@ const ENC_STEPS = 8
 
 // ─── Tarjeta Familia (local) ────────────────────────────────────────────────────
 function LocalFamiliaCard({
-  familia, campoEval, predialEnc, onDelete,
+  familia, campoEval, predialEnc, sigCambio, onDelete,
 }: {
   familia: FamiliaRecord
   campoEval?: EvaluacionRecord
   predialEnc?: EncuestaPredialRecord
+  /** El SIG ya cambió el límite o las zonas de este predio y el celular sigue con la copia vieja. */
+  sigCambio?: boolean
   onDelete: () => void
 }) {
   const navigate = useNavigate()
@@ -142,6 +145,11 @@ function LocalFamiliaCard({
             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${st.color}`}>{st.label}</span>
           </div>
           {familia.sync_status === 'error' && familia.sync_error && <ErrorPanel msg={familia.sync_error} />}
+          {sigCambio && (
+            <p className="mt-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs font-medium text-amber-800">
+              El SIG cambió este predio. Ábrelo y pulsa «Actualizar desde el SIG» para ver el límite y las zonas nuevas.
+            </p>
+          )}
         </div>
         <ChevronRight size={18} className="text-gray-300 flex-shrink-0 mt-1" />
       </button>
@@ -364,6 +372,10 @@ export function Home() {
       db.encuestas.orderBy('updated_at').reverse().toArray(),
       db.revisiones.where('sync_status').anyOf(['pending', 'error']).count(),
     ])
+    // La última descarga del SIG que quedó en el celular: con ella se avisa de
+    // cambios aunque en este momento no haya señal.
+    const cache = await getPrediosHabilitadosCache()
+    setPrediosCache(Object.fromEntries(cache.map(c => [c.predio_id, c])))
     setFamilias(f as FamiliaRecord[])
     setPredios(p as PredioRecord[])
     setEvals(e as EvaluacionRecord[])
@@ -414,7 +426,8 @@ export function Home() {
 
   // "Predios" también necesita remoteEvals/remoteEncs para las etiquetas
   // "ya diligenciado por..." y evitar que dos personas llenen el mismo predio.
-  useEffect(() => { if (tab === 'todos' || tab === 'predios') loadRemote() }, [tab, loadRemote])
+  // «Mis registros» también: ahí se avisa si el SIG cambió un predio ya abierto.
+  useEffect(() => { if (tab === 'mios' || tab === 'todos' || tab === 'predios') loadRemote() }, [tab, loadRemote])
 
   // predio_id → quién ya diligenció Campo / Predial (solo registros sincronizados)
   const statusByPredio: Record<string, PredioSubmissionStatus> = {}
@@ -639,6 +652,7 @@ export function Home() {
                   familia={f}
                   campoEval={evalsByFamilia[f.local_id]}
                   predialEnc={encsByFamilia[f.local_id]}
+                  sigCambio={sigCambioRespectoA(f, f.predio_core_id ? prediosCache[f.predio_core_id] : undefined)}
                   onDelete={() => handleDeleteFamilia(f)}
                 />
               ))}

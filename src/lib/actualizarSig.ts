@@ -25,7 +25,7 @@
 
 import { db } from '../db/schema'
 import { fetchZonasPredio, fetchPredioCampo, type PredioCampoRow } from './core'
-import type { ZonaSig, ZonaFinca } from '../types/core'
+import type { ZonaSig, ZonaFinca, PredioHabilitado } from '../types/core'
 import type { FamiliaRecord } from '../types/familia'
 
 /** Corte para no dejar a alguien mirando un spinner con señal de 1 raya. */
@@ -276,4 +276,33 @@ export async function aplicarCambiosSig(familia: FamiliaRecord, diff: DiffSig): 
     sig_actualizado_at: ahora,
     updated_at:         ahora,
   })
+}
+
+// ─── Aviso rápido: ¿el SIG ya cambió este predio? ─────────────────────────────
+
+/**
+ * Compara el snapshot de la familia contra lo último que se descargó del SIG
+ * (`prediosHabilitados`, la caché que `refreshPrediosHabilitados` renueva cada
+ * vez que hay internet). No consulta la red ni escribe nada: solo sirve para
+ * avisar en la lista «aquí hay cambios, abre el predio y actualiza». El diff
+ * detallado y la aplicación siguen siendo `consultarCambiosSig` y
+ * `aplicarCambiosSig`, con su confirmación.
+ */
+export function sigCambioRespectoA(familia: FamiliaRecord, fresco: PredioHabilitado | undefined): boolean {
+  if (!fresco || familia.es_practica || !familia.predio_core_id) return false
+  // Una descarga que trajo cero zonas no es un cambio: es lo que
+  // `consultarCambiosSig` bloquea para no vaciar el predio.
+  if (fresco.zonas.length === 0) return false
+
+  const locales = new Map(familia.zonas_sig.map(z => [z.zona_id, z]))
+  if (fresco.zonas.length !== familia.zonas_sig.length) return true
+  for (const remota of fresco.zonas) {
+    const local = locales.get(remota.zona_id)
+    if (!local) return true
+    if (!mismaGeometria(local.geojson, remota.geojson) || areaCambio(local.area_ha, remota.area_ha)) return true
+  }
+
+  const fincaLocal = familia.zonas_finca ?? []
+  return fresco.zonas_finca.length !== fincaLocal.length ||
+    fresco.zonas_finca.some((f, i) => !mismaGeometria(f.geojson, fincaLocal[i]?.geojson))
 }
