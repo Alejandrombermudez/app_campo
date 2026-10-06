@@ -35,7 +35,7 @@ Si necesitas exponer un dato nuevo del núcleo a esta app, amplía `core.v_predi
 ya tiene datos capturados y se descarta después en el SIG, se conserva marcada `descartada` (no se pierde
 el trabajo); si no tenía datos, se omite. Existe un módulo legacy (`src/pages/Predio/`, sin botón de acceso
 en la UI) que sí tiene un dropdown manual de "número de zonas" y fabrica zonas en blanco — no se tocó, ver
-`CONTEXTO_APP_CAMPO.md` punto 10 del backlog.
+`CONTEXTO_APP_CAMPO.md` punto 10 de la lista de pendientes.
 
 ## "Actualizar desde el SIG" (2026-08-05) — el snapshot se refresca sin destruir nada
 

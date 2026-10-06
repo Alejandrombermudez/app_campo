@@ -17,9 +17,9 @@ Es la copia en desarrollo de `familias-res/` (que fue la prueba de concepto; est
 
 | Módulo | Qué hace | Estado |
 |---|---|---|
-| **Módulo SIG** (`/sig/:familiaLocalId`) | Mapa satelital con el polígono de la finca + zonas de siembra del SIG I, geolocalización GPS respecto a las zonas, y **corrección de zonas** (SIG II): confirmar / editar vértices / descartar / dibujar nuevas | ✅ Construido 2026-07-08 |
-| **Evaluación de Campo** (`/evaluacion/:id`) | Formato biofísico AE-CAMPO-001: cartografía social, cobertura, suelo, logística (por zona real del SIG), riesgos, firmas | ✅ Funciona, conectado a zonas reales |
-| **Encuesta Predial** (`/encuesta/:id`) | Encuesta socioeconómica (vivienda, familia, economía, cultivos, ganadería, tecnología, bosque) | ✅ Funciona (la aplica otra persona del equipo) |
+| **Módulo SIG** (`/sig/:familiaLocalId`) | Mapa satelital con el polígono de la finca + zonas de siembra del SIG I, geolocalización GPS respecto a las zonas, y **corrección de zonas** (SIG II): confirmar / editar vértices / descartar / dibujar nuevas | Construido 2026-07-08 |
+| **Evaluación de Campo** (`/evaluacion/:id`) | Formato biofísico AE-CAMPO-001: cartografía social, cobertura, suelo, logística (por zona real del SIG), riesgos, firmas | Funciona, conectado a zonas reales |
+| **Encuesta Predial** (`/encuesta/:id`) | Encuesta socioeconómica (vivienda, familia, economía, cultivos, ganadería, tecnología, bosque) | Funciona (la aplica otra persona del equipo) |
 
 **Regla de negocio central (pedida explícitamente por el usuario): SIG I es OBLIGATORIO.** Un predio solo aparece en la app si Jurídica aprobó Y el SIG subió al menos una zona de siembra Y alguien pulsó "Enviar a Campo" en la intranet. La app no permite crear predios ni zonas en blanco.
 
@@ -52,9 +52,9 @@ Claves de arquitectura:
 ### SQL (en `Intranet-AE/docs/sql/`, las corre el usuario en el SQL Editor)
 | Archivo | Qué hace | Estado |
 |---|---|---|
-| `migration_campo_core.sql` | Vista `core.v_predios_campo`, FKs de siembra.* → core.predios, elimina columnas duplicadas y `siembra.predios`, grants anon (vista + geo.zonas + RPC lectura). TRUNCA datos de prueba | ✅ ejecutada |
-| `migration_campo_core_v2.sql` | Endurece la vista: EXISTS geo.zonas tipo restauracion (SIG I obligatorio a nivel de datos) | ✅ ejecutada |
-| `migration_zona_revision.sql` | `geo.zona_revision` + RPC `geo.revisar_zona` + estado `descartada` + vista excluye descartadas | ⚠️ **PENDIENTE de ejecutar** (verificar con el usuario; sin ella las revisiones quedan "pendientes de sincronizar" en los celulares, no se pierden) |
+| `migration_campo_core.sql` | Vista `core.v_predios_campo`, FKs de siembra.* → core.predios, elimina columnas duplicadas y `siembra.predios`, grants anon (vista + geo.zonas + RPC lectura). TRUNCA datos de prueba | ejecutada |
+| `migration_campo_core_v2.sql` | Endurece la vista: EXISTS geo.zonas tipo restauracion (SIG I obligatorio a nivel de datos) | ejecutada |
+| `migration_zona_revision.sql` | `geo.zona_revision` + RPC `geo.revisar_zona` + estado `descartada` + vista excluye descartadas | Atención: **PENDIENTE de ejecutar** (verificar con el usuario; sin ella las revisiones quedan "pendientes de sincronizar" en los celulares, no se pierden) |
 
 ### Intranet-AE
 - `crear-en-siembra/route.ts`: validaciones SIG I (etapa + zonas), INSERT sin columnas duplicadas.
@@ -77,8 +77,8 @@ Claves de arquitectura:
 
 ## 4. Qué falta (en orden sugerido)
 
-1. ~~Correr `migration_zona_revision.sql`~~ ✅ corrida 2026-07-28. `migration_geo_versionado.sql` ✅ corrida 2026-08-11.
-2. ~~**Prueba E2E real**~~ ✅ **La app está en uso productivo.** Al 2026-08-12: 2 predios en campo (La Dalia,
+1. ~~Correr `migration_zona_revision.sql`~~ corrida 2026-07-28. `migration_geo_versionado.sql` corrida 2026-08-11.
+2. ~~**Prueba E2E real**~~ **La app está en uso productivo.** Al 2026-08-12: 2 predios en campo (La Dalia,
    Versalles), 27 revisiones sincronizadas, evaluadores "José Jarlinson vega" y "Natalia". El ciclo completo
    Jurídica → SIG → Campo → SIG II → intranet está andando con gente real.
    Pendientes operativos detectados al revisar los datos (2026-08-12), **no son bugs de código**:
@@ -96,7 +96,7 @@ Claves de arquitectura:
 3. **Mapa base offline (PMTiles)**: hoy sin señal los polígonos y el GPS funcionan pero el fondo satelital no carga. Decisión ya tomada en docs: PMTiles sirve para el geovisor Y como mapa offline de campo.
 4. **Modo "caminar con GPS"**: dibujar/corregir zona grabando el track del técnico (decisión abierta en `ARQUITECTURA_DATOS.md`; hoy solo edición por vértices).
 5. **Foto por zona en el módulo SIG** (el diseño de `zona_revision` contemplaba `foto_url`; la columna no se incluyó — agregar cuando se implemente captura).
-6. ~~**Deploy de app_campo**~~ ✅ desplegada y en uso (repo `github.com/Alejandrombermudez/app_campo`, push a `main`).
+6. ~~**Deploy de app_campo**~~ desplegada y en uso (repo `github.com/Alejandrombermudez/app_campo`, push a `main`).
    Ojo con el service worker: tras un despliegue, si el celular sigue mostrando la versión vieja hay que
    cerrar la app del todo y reabrirla.
 7. **`codigo_predio`**: ¿es lo mismo que `core.predios.codigo_catastral`? Sin resolver — hoy se pregunta en la evaluación.
@@ -130,7 +130,7 @@ cd app_campo && npm install && npm run dev   # puerto 5173; .env ya trae la anon
   **Las correcciones que se perdieron antes del arreglo no son recuperables** (quedaron sin geometría tanto
   en el celular como en `geom_corregida`) — hay que rehacerlas en terreno.
 - **(2026-08-05) Campo tiene la última palabra, y el SIG versiona en vez de borrar.**
-  `migration_geo_versionado.sql` (⚠️ pendiente de correr, ver `docs/sql/pending.sql`). El SIG destruía:
+  `migration_geo_versionado.sql` (Atención: pendiente de correr, ver `docs/sql/pending.sql`). El SIG destruía:
   `modo='sobreescribir'` hacía `DELETE` de `geo.zonas` y `crear_zona_union` también, así que los `zona_id`
   que el celular ya tenía dejaban de existir y `geo.revisar_zona` levantaba `'La zona X no existe'` — la
   corrección hecha en terreno **no se podía aplicar nunca**. Ahora cada subida es un lote con versión
@@ -145,7 +145,7 @@ cd app_campo && npm install && npm run dev   # puerto 5173; .env ya trae la anon
   **solo consulta** (arma un resumen de qué cambiaría, no escribe nada en el dispositivo) y el segundo
   aplica. Sin internet el botón está deshabilitado; con `navigator.onLine === true` pero sin datos reales,
   la consulta falla (timeout 20 s) y tampoco escribe — un toque por error en terreno es inofensivo.
-  Garantías verificadas end-to-end contra la BD real (predio "La Dalia", 2026-08-05): aplicar solo
+  Garantías verificadas de principio a fin contra la BD real (predio "La Dalia", 2026-08-05): aplicar solo
   reemplaza `zonas_sig`/`zonas_finca`/identidad en `db.familias`; revisiones, evaluaciones, encuestas y
   fotos quedan intactas; una zona que el SIG retiró y ya tenía datos capturados se conserva en la
   evaluación marcada `descartada` y visible en el módulo SIG como "Retirada por el SIG". De paso se cerró
