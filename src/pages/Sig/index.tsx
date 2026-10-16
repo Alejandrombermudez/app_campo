@@ -150,9 +150,20 @@ export function SigPage() {
     })
 
     mapRef.current = map
-    return () => { map.remove(); mapRef.current = null }
+    return () => {
+      map.remove()
+      mapRef.current = null
+      // Las capas del GPS eran de este mapa: sin esto el punto azul no vuelve
+      // a dibujarse en un mapa nuevo (setLatLng sobre una capa huérfana no pinta).
+      gpsMarkerRef.current = null
+      gpsCircleRef.current = null
+      fittedRef.current = false
+    }
+    // Depende del predio, no del objeto `familia`: cada guardado lo vuelve a
+    // leer de Dexie (objeto nuevo) y con [familia] el mapa se destruía y se
+    // creaba otra vez tras cada acción — volvía al zoom 15 y perdía el GPS.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [familia])
+  }, [familia?.local_id])
 
   // ─── Pintar capas cada vez que cambian las zonas ────────────────────────────
   useEffect(() => {

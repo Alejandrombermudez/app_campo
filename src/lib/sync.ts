@@ -1,6 +1,7 @@
 import { db } from '../db/schema'
 import { supabase, evalTable } from './supabase'
 import type { PhotoRecord, ZonaData, EvaluacionRecord } from '../types/evaluacion'
+import { vincularZonaNueva } from '../types/evaluacion'
 import type { CultivoRow, EncuestaPredialRecord } from '../types/encuesta'
 
 function encTable()     { return supabase.schema('siembra').from('familias') }
@@ -35,13 +36,24 @@ function mergeJsonb(
 /** Identidad de una zona: zona_id (geo.zonas real) o, en registros legacy sin zona_id, zona_numero */
 function zonaKey(z: ZonaData): string { return z.zona_id ?? `n${z.zona_numero}` }
 
+/**
+ * ¿Es la misma zona? Mismo zona_id, o la misma zona dibujada en campo antes y
+ * después de tener zona_id: la nube pudo recibirla sin id y el celular ya la
+ * tiene con el suyo (vincularZonaNueva). Sin esto quedaba dos veces.
+ */
+function mismaZona(a: ZonaData, b: ZonaData): boolean {
+  return zonaKey(a) === zonaKey(b)
+    || (!!a.revision_local_id && a.revision_local_id === b.revision_local_id)
+}
+
 /** Mergea zonas por zona_id (identidad real del SIG; zona_numero solo ordena) */
 function mergeZonas(remote: ZonaData[], local: ZonaData[]): ZonaData[] {
   const result = remote.map(rz => {
-    const lz = local.find(z => zonaKey(z) === zonaKey(rz))
+    const lz = local.find(z => mismaZona(z, rz))
     if (!lz) return rz
     return {
       ...rz,
+      zona_id: lz.zona_id ?? rz.zona_id,
       cobertura: mergeJsonb(
         (rz.cobertura ?? {}) as Record<string, unknown>,
         (lz.cobertura ?? {}) as Record<string, unknown>,
@@ -58,7 +70,7 @@ function mergeZonas(remote: ZonaData[], local: ZonaData[]): ZonaData[] {
   })
   // Zonas locales que no existen aún en remote
   for (const lz of local) {
-    if (!result.find(z => zonaKey(z) === zonaKey(lz))) result.push(lz)
+    if (!result.find(z => mismaZona(z, lz))) result.push(lz)
   }
   return result
 }
@@ -157,6 +169,25 @@ async function remapearZonaId(
   }
 }
 
+/**
+ * La zona dibujada en campo ya existe en el servidor: la evaluación, que la
+ * tenía por el local_id de la revisión, pasa a tenerla por su zona_id (ver
+ * vincularZonaNueva). Si la evaluación ya estaba en la nube vuelve a quedar
+ * pendiente, para que allá también quede ligada a la zona.
+ */
+async function vincularEvaluacionZonaNueva(
+  familiaLocalId: string, revisionLocalId: string, zonaId: string,
+): Promise<void> {
+  for (const ev of await db.evaluaciones.where('familia_local_id').equals(familiaLocalId).toArray()) {
+    const zonas = vincularZonaNueva(ev.zonas, revisionLocalId, zonaId)
+    if (!zonas) continue
+    await db.evaluaciones.update(ev.id!, {
+      zonas,
+      ...(ev.sync_status === 'synced' ? { sync_status: 'pending' as const } : {}),
+    })
+  }
+}
+
 // ─── Sincronizar revisiones de zonas (SIG II) → RPC geo.revisar_zona ─────────
 // Idempotente: el RPC ignora local_id repetidos, así que reintentar es seguro.
 export async function syncPendingRevisiones(): Promise<{ synced: number; errors: number }> {
@@ -215,6 +246,10 @@ export async function syncPendingRevisiones(): Promise<{ synced: number; errors:
       const idAplicado = (zonaId as string | null) ?? rev.zona_id
       if (idAplicado && rev.zona_id && idAplicado !== rev.zona_id) {
         await remapearZonaId(rev.familia_local_id, rev.zona_id, idAplicado)
+      }
+      // Zona dibujada en campo: el servidor acaba de darle su zona_id.
+      if (idAplicado && !rev.zona_id && rev.accion === 'nueva') {
+        await vincularEvaluacionZonaNueva(rev.familia_local_id, rev.local_id, idAplicado)
       }
 
       await db.revisiones.update(rev.id!, {

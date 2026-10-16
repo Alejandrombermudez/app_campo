@@ -151,7 +151,9 @@ export function StatsTab() {
       if (online) {
         const [{ count: ce }, { count: cn }] = await Promise.all([
           supabase.schema('siembra').from('evaluaciones_campo').select('*', { count: 'exact', head: true }),
-          supabase.schema('siembra').from('familias').select('*', { count: 'exact', head: true }),
+          // Sin la fila vacía que crea la intranet al «Enviar a Campo»
+          supabase.schema('siembra').from('familias').select('*', { count: 'exact', head: true })
+            .not('step_completed', 'is', null),
         ])
         totalEvalRemote = ce ?? null
         totalEncRemote  = cn ?? null

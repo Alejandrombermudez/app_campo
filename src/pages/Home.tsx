@@ -411,6 +411,10 @@ export function Home() {
         encTable()
           .select('id, local_id, fecha_encuesta, created_by, created_at, predio_id, step_completed')
           .is('deleted_at', null)   // no mostrar familias soft-deleted en "Todos"
+          // La fila que crea la intranet al «Enviar a Campo» no es una encuesta:
+          // nadie la ha llenado (step_completed NULL). Contarla ponía «Predial ya
+          // diligenciado» en un predio recién habilitado.
+          .not('step_completed', 'is', null)
           .order('created_at', { ascending: false }).limit(100),
         // Descargar los predios habilitados (v_predios_campo) para resolver el
         // nombre de cada registro remoto y para las tarjetas del tab "Predios".

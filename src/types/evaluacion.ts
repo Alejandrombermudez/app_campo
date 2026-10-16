@@ -155,12 +155,19 @@ export function reconciliarZonas(actuales: ZonaData[], vigentes: ZonaVigente[]):
   )
 
   const resultado: ZonaData[] = []
+  const usadas = new Set<ZonaData>()
   let numero = 1
 
   for (const v of vigentes) {
-    const prev = v.zona_id
-      ? porZonaId.get(v.zona_id)
-      : (v.revision?.local_id ? porRevisionLocalId.get(v.revision.local_id) : undefined)
+    // Una zona dibujada en campo se reconoce por el local_id de su revisión
+    // mientras no tiene zona_id. Ya sincronizada tiene las dos llaves: si la
+    // entrada por zona_id está vacía y la de la revisión trae datos, mandan
+    // esos datos (celulares que sincronizaron antes de vincularZonaNueva, donde
+    // la zona quedó partida en una entrada vacía y otra marcada descartada).
+    const porId  = v.zona_id ? porZonaId.get(v.zona_id) : undefined
+    const porRev = v.revision?.local_id ? porRevisionLocalId.get(v.revision.local_id) : undefined
+    const prev   = tieneDatos(porId) ? porId : (porRev ?? porId)
+    if (prev) usadas.add(prev)
 
     if (v.descartada && !tieneDatos(prev)) continue
 
@@ -172,7 +179,9 @@ export function reconciliarZonas(actuales: ZonaData[], vigentes: ZonaVigente[]):
       suelo:              prev?.suelo ?? {},
       logistica:          prev?.logistica ?? {},
       descartada:         v.descartada,
-      revision_local_id:  v.zona_id ? undefined : (v.revision?.local_id ?? null),
+      // Con zona_id se conserva la llave de la revisión si la traía: es con la
+      // que mergeZonas reconoce la copia que ya esté en la nube sin zona_id.
+      revision_local_id:  v.zona_id ? (prev?.revision_local_id ?? undefined) : (v.revision?.local_id ?? null),
     })
   }
 
@@ -184,6 +193,7 @@ export function reconciliarZonas(actuales: ZonaData[], vigentes: ZonaVigente[]):
     vigentes.map(v => v.zona_id ?? v.revision?.local_id).filter(Boolean) as string[],
   )
   for (const z of actuales) {
+    if (usadas.has(z)) continue
     const clave = z.zona_id ?? z.revision_local_id ?? null
     if (clave && clavesVigentes.has(clave)) continue
     if (!tieneDatos(z)) continue
@@ -191,6 +201,26 @@ export function reconciliarZonas(actuales: ZonaData[], vigentes: ZonaVigente[]):
   }
 
   return resultado
+}
+
+/**
+ * Una zona dibujada en campo ('nueva') no tiene zona_id hasta sincronizar: la
+ * evaluación la conoce por el local_id de su revisión. Cuando el servidor la
+ * crea y devuelve su id, la entrada tiene que quedar con ese id; si no,
+ * reconciliarZonas la veía como otra zona: la nueva aparecía vacía y lo
+ * capturado quedaba aparte, marcado descartada. revision_local_id se conserva
+ * (ver mergeZonas). Devuelve null si ninguna entrada era de esa revisión.
+ */
+export function vincularZonaNueva(
+  zonas: ZonaData[], revisionLocalId: string, zonaId: string,
+): ZonaData[] | null {
+  let cambio = false
+  const resultado = zonas.map(z => {
+    if (z.zona_id || z.revision_local_id !== revisionLocalId) return z
+    cambio = true
+    return { ...z, zona_id: zonaId }
+  })
+  return cambio ? resultado : null
 }
 
 // ─── Registro principal en IndexedDB ─────────────────────────────────────────

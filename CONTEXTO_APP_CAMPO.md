@@ -1,7 +1,9 @@
 # Contexto — App de Campo (app_campo)
 
 > **Documento de traspaso entre sesiones.** Qué es esta app, qué se hizo, qué falta y cómo retomar.
-> Última actualización: **2026-08-12** — sesión que agregó "Actualizar desde el SIG", arregló la pérdida de
+> Última actualización: **2026-10-15** — revisión del ciclo campo ↔ SIG contra la base real y tres arreglos
+> (mapa que se rehacía, encuesta vacía contada como hecha, zona nueva evaluada sin señal); ver §6.
+> Antes: 2026-08-12 — sesión que agregó "Actualizar desde el SIG", arregló la pérdida de
 > correcciones al confirmar, y llevó los resultados de campo a la intranet. La app está **en uso productivo**.
 > Base anterior: 2026-07-08 (reconexión al núcleo `core` + construcción del módulo SIG).
 >
@@ -119,6 +121,29 @@ cd app_campo && npm install && npm run dev   # puerto 5173; .env ya trae la anon
 - El RPC aplica el cambio DIRECTO a `geo.zonas` (estado `validada`, origen `campo`, version+1) — no hay cola de aprobación; la auditoría es `geo.zona_revision`.
 - Identidad/ubicación jamás se duplican en siembra.*: FKs a core + JOIN.
 - Dos dominios separados (Siembra=proceso vs RAS=conservación); esta app es SOLO del proceso de restauración.
+- **(2026-10-15) Tres arreglos tras revisar el ciclo campo ↔ SIG con los datos reales.** La revisión no
+  encontró trabajo perdido: las 28 revisiones de zonas están en la base con su geometría y coinciden con
+  `geo.zonas`. Lo que se arregló:
+  - **El mapa del módulo SIG se rehacía después de cada acción** (desde el 2026-07-08). El efecto que crea
+    el mapa dependía de `[familia]`, y cada guardado vuelve a leer la familia de Dexie (objeto nuevo): la
+    limpieza del efecto destruía el mapa y se creaba otro en zoom 15, sin ajustar a las zonas, y el punto
+    azul del GPS no volvía (sus capas eran del mapa viejo). Ahora depende de `familia?.local_id` y la
+    limpieza suelta las capas del GPS.
+  - **La fila vacía de «Enviar a Campo» contaba como encuesta hecha.** `crear-en-siembra` inserta en
+    `siembra.familias` una fila sin ningún paso (`step_completed` NULL, `created_by` = correo de quien
+    envió). El celular decía «Predial ya diligenciado · <ese correo>» (pasó con La Guajira) y el tablero
+    del SIG la contaba como encuesta devuelta. Toda lectura de encuestas filtra ahora
+    `step_completed IS NOT NULL` — en esta app y en la intranet (worklist, Resultados de campo, Reporte).
+    La fila se queda: es la que marca que el predio entró a Siembra. Ojo: cuando el técnico suba su
+    encuesta quedan dos filas para el expediente, y `cancelar-campo` hace `.maybeSingle()` por
+    `expediente_id` — sin resolver.
+  - **Zona dibujada en campo y evaluada antes de sincronizar.** La evaluación la conocía por
+    `revision_local_id`; al sincronizar, la revisión recibía su `zona_id` pero la evaluación no, y
+    `reconciliarZonas` la partía: la zona aparecía vacía y lo capturado quedaba aparte, marcado
+    `descartada`. Ahora `syncPendingRevisiones` llama a `vincularZonaNueva` (y vuelve a dejar pendiente la
+    evaluación si ya estaba en la nube), `mergeZonas` reconoce la copia de la nube por `revision_local_id`
+    para no duplicarla, y `reconciliarZonas` repara una zona ya partida. En producción no había pasado:
+    ninguna revisión `nueva` en la base al 2026-10-15.
 - **(2026-08-11) Confirmar una zona ya corregida NO la devuelve a la forma del SIG.** Bug reportado desde
   terreno: corregir el polígono → Guardar → "Confirmar" (que se lee como "confirmo mi corrección") borraba
   la geometría. `confirmarZona()` manda `geojson: null` y `upsertRevision` sobrescribía la revisión

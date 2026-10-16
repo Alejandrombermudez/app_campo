@@ -167,7 +167,8 @@ export async function buscarDiligenciamientoPropio(
     .select('id, created_at')
     .eq('predio_id', predioId)
     .eq('created_by', createdBy.trim())
-  if (tabla === 'familias') query = query.is('deleted_at', null)
+  // En familias, ni las borradas ni la fila vacía de «Enviar a Campo» (step_completed NULL)
+  if (tabla === 'familias') query = query.is('deleted_at', null).not('step_completed', 'is', null)
   const { data, error } = await query.order('created_at', { ascending: true }).limit(1)
   if (error || !data || data.length === 0) return undefined
   return data[0]
