@@ -16,16 +16,16 @@ export function ChkGroup({ opts, val, onChange, cols = 2 }: ChkGroupProps) {
           key={o}
           type="button"
           onClick={() => toggle(o)}
-          className={`py-2 px-3 rounded-lg border text-sm font-medium transition-all text-left flex items-center gap-2 ${
+          className={`min-h-12 py-2.5 px-3.5 rounded-2xl border-[1.5px] text-[15px] font-medium transition-all text-left flex items-center gap-2.5 active:scale-[0.98] ${
             val.includes(o)
-              ? 'bg-bosque border-bosque text-white'
-              : 'bg-white border-gray-200 text-gray-700 hover:border-bosque'
+              ? 'boton-bosque border-bosque'
+              : 'bg-white border-gray-300 text-gray-800'
           }`}
         >
-          <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${
-            val.includes(o) ? 'bg-white border-white' : 'border-gray-400'
+          <span className={`w-5 h-5 rounded-md border-[1.5px] flex-shrink-0 flex items-center justify-center ${
+            val.includes(o) ? 'bg-ambar border-ambar' : 'border-gray-400'
           }`}>
-            {val.includes(o) && <span className="text-bosque text-xs font-bold">✓</span>}
+            {val.includes(o) && <span className="text-tinta text-xs font-bold">✓</span>}
           </span>
           {o}
         </button>

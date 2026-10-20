@@ -98,14 +98,14 @@ function Section({ title, data, defaultOpen = true }: {
   })
 
   if (!entries.length) return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-3">
+    <div className="tarjeta px-4 py-3">
       <p className="text-xs font-bold text-gray-400">{title}</p>
       <p className="text-xs text-gray-300 mt-1">Sin datos registrados</p>
     </div>
   )
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+    <div className="tarjeta overflow-hidden">
       <button onClick={() => setOpen(o => !o)}
         className="w-full flex items-center justify-between px-4 py-3">
         <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">{title}</span>
@@ -124,13 +124,13 @@ function Section({ title, data, defaultOpen = true }: {
 function CultivosTable({ cultivos }: { cultivos: Array<Record<string, string>> }) {
   const filled = cultivos.filter(c => c.cultivo && (c.area_ha || c.rendimiento || c.destino))
   if (!filled.length) return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-3">
+    <div className="tarjeta px-4 py-3">
       <p className="text-xs font-bold text-gray-400">§6A Cultivos</p>
       <p className="text-xs text-gray-300 mt-1">Sin datos registrados</p>
     </div>
   )
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+    <div className="tarjeta overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-50">
         <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">§6A Cultivos</span>
       </div>
@@ -164,7 +164,7 @@ function CultivosTable({ cultivos }: { cultivos: Array<Record<string, string>> }
 function MiembrosTable({ miembros }: { miembros: Array<Record<string, string>> }) {
   if (!miembros?.length) return null
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+    <div className="tarjeta overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-50">
         <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Núcleo familiar</span>
       </div>
@@ -257,8 +257,8 @@ export function PredialViewer() {
   return (
     <div className="min-h-screen flex flex-col bg-transparent">
 
-      <header className="bg-emerald-700 text-white px-4 py-3 flex items-center gap-3">
-        <button onClick={() => navigate(-1)} className="p-1 rounded"><ArrowLeft size={20}/></button>
+      <header className="cabecera rounded-b-3xl px-3 pt-[max(env(safe-area-inset-top),0.75rem)] pb-4 flex items-center gap-3">
+        <button onClick={() => navigate(-1)} className="boton-mapa vidrio-oscuro !w-11 !h-11" aria-label="Volver"><ArrowLeft size={20}/></button>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm truncate">
             {predio?.nombre_predio || '(Predio sin identificar)'}

@@ -134,7 +134,7 @@ export function EncuestaPage() {
       </p>
       <button
         onClick={() => navigate(ev.familia_local_id ? `/familia/${ev.familia_local_id}` : '/')}
-        className="bg-bosque text-white px-6 py-3 rounded-xl font-semibold"
+        className="boton boton-bosque"
       >
         {ev.familia_local_id ? 'Volver a la familia' : 'Ir al inicio'}
       </button>
@@ -143,11 +143,11 @@ export function EncuestaPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-transparent">
-      <header className="bg-bosque text-white px-4 py-3 flex items-center gap-3">
-        <button onClick={() => navigate('/')} className="p-1 rounded"><ArrowLeft size={20} /></button>
+      <header className="cabecera rounded-b-3xl px-3 pt-[max(env(safe-area-inset-top),0.75rem)] pb-4 flex items-center gap-3">
+        <button onClick={() => navigate('/')} className="boton-mapa vidrio-oscuro !w-11 !h-11" aria-label="Volver"><ArrowLeft size={20} /></button>
         <div className="flex-1 min-w-0">
-          <p className="text-xs opacity-80 truncate">{ev.nombre_propietario || 'Nueva encuesta predial'}</p>
-          <p className="text-xs opacity-60">Caracterización predial</p>
+          <h1 className="text-xl leading-tight">Encuesta predial</h1>
+          <p className="text-xs opacity-80 truncate">{ev.nombre_propietario || 'Nueva encuesta'} · caracterización socioeconómica</p>
         </div>
       </header>
 
@@ -164,15 +164,15 @@ export function EncuestaPage() {
         {step.id === 'bosque'     && <EStep08 data={ev.sec_bosque}     onChange={v => setEv(p => ({ ...p, sec_bosque: v }))} />}
       </main>
 
-      <footer className="bg-white border-t border-gray-100 px-4 py-3 flex gap-3">
+      <footer className="vidrio !border-x-0 !border-b-0 rounded-t-3xl sticky bottom-0 z-10 px-4 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] flex gap-3">
         {stepIdx > 0 && (
           <button onClick={saveAndBack} disabled={saving}
-            className="flex items-center gap-2 px-4 py-3 rounded-xl border border-gray-200 text-gray-600 font-medium text-sm">
+            className="boton boton-vidrio">
             <ArrowLeft size={16} /> Atrás
           </button>
         )}
         <button onClick={saveAndNext} disabled={saving}
-          className="flex-1 flex items-center justify-center gap-2 bg-bosque text-white py-3 rounded-xl font-semibold text-sm">
+          className="boton boton-bosque flex-1">
           {saving ? <span className="animate-pulse">Guardando…</span>
             : stepIdx === total - 1 ? <><Save size={16} /> Finalizar</>
             : <>Siguiente <ArrowRight size={16} /></>}

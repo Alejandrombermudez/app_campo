@@ -88,14 +88,14 @@ function Section({ title, data, defaultOpen = true }: {
   )
 
   if (!entries.length) return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-3">
+    <div className="tarjeta px-4 py-3">
       <p className="text-xs font-bold text-gray-400">{title}</p>
       <p className="text-xs text-gray-300 mt-1">Sin datos registrados</p>
     </div>
   )
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+    <div className="tarjeta overflow-hidden">
       <button onClick={() => setOpen(o => !o)}
         className="w-full flex items-center justify-between px-4 py-3">
         <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">{title}</span>
@@ -171,8 +171,8 @@ export function CampoViewer() {
   return (
     <div className="min-h-screen flex flex-col bg-transparent">
 
-      <header className="bg-bosque text-white px-4 py-3 flex items-center gap-3">
-        <button onClick={() => navigate(-1)} className="p-1 rounded"><ArrowLeft size={20}/></button>
+      <header className="cabecera rounded-b-3xl px-3 pt-[max(env(safe-area-inset-top),0.75rem)] pb-4 flex items-center gap-3">
+        <button onClick={() => navigate(-1)} className="boton-mapa vidrio-oscuro !w-11 !h-11" aria-label="Volver"><ArrowLeft size={20}/></button>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm truncate">{predio?.nombre_predio || '(Predio sin identificar)'}</p>
           <p className="text-xs opacity-60 truncate">
@@ -207,7 +207,7 @@ export function CampoViewer() {
 
         {/* Firmas */}
         {(record.firma_eval1_url || record.firma_eval2_url) && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 space-y-3">
+          <div className="tarjeta px-4 py-4 space-y-3">
             <p className="text-xs font-bold text-gray-700 uppercase tracking-wide">Firmas</p>
             {record.firma_eval1_url && (
               <div>

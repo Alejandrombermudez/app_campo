@@ -108,7 +108,7 @@ export function ActualizarSigCard({
   return (
     <>
       {/* Tarjeta */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4">
+      <div className="tarjeta px-4 py-4">
         <div className="flex items-start gap-3">
           <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
             <Satellite size={20} className="text-indigo-600" />

@@ -13,10 +13,10 @@ export function YesNo({ val, onChange, labelYes = 'Sí', labelNo = 'No' }: YesNo
           key={String(b)}
           type="button"
           onClick={() => onChange(b)}
-          className={`flex-1 py-2 px-4 rounded-lg border text-sm font-medium transition-all ${
+          className={`flex-1 min-h-12 py-2.5 px-4 rounded-2xl border-[1.5px] text-[15px] font-semibold transition-all active:scale-[0.98] ${
             val === b
-              ? 'bg-bosque border-bosque text-white'
-              : 'bg-white border-gray-200 text-gray-700 hover:border-bosque'
+              ? 'boton-bosque border-bosque'
+              : 'bg-white border-gray-300 text-gray-800'
           }`}
         >
           {b ? labelYes : labelNo}

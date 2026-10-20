@@ -46,7 +46,7 @@ function MetricCard({
   label, value, sub, color = 'text-bosque'
 }: { label: string; value: string | number; sub?: string; color?: string }) {
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4">
+    <div className="tarjeta px-4 py-4">
       <p className="text-xs text-gray-500 mb-1">{label}</p>
       <p className={`text-3xl font-bold ${color}`}>{value}</p>
       {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
@@ -242,7 +242,7 @@ export function StatsTab() {
           <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
             Por municipio
           </p>
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-3 space-y-3">
+          <div className="tarjeta px-4 py-3 space-y-3">
             {data.byMuni.map(m => {
               const total = m.evaluaciones + m.encuestas
               return (
@@ -277,7 +277,7 @@ export function StatsTab() {
           <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
             Por evaluador
           </p>
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-3 space-y-3">
+          <div className="tarjeta px-4 py-3 space-y-3">
             {data.byEvaluador.map(e => (
               <div key={e.created_by ?? 'anon'}>
                 <div className="flex items-center justify-between mb-1">
@@ -299,7 +299,7 @@ export function StatsTab() {
           <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
             Ganadería (encuestas locales)
           </p>
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 space-y-3">
+          <div className="tarjeta px-4 py-4 space-y-3">
             <div>
               <div className="flex justify-between items-center mb-1">
                 <span className="text-xs text-gray-600">Familias con ganadería</span>
@@ -326,7 +326,7 @@ export function StatsTab() {
           <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
             Actividad reciente
           </p>
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="tarjeta overflow-hidden">
             {data.recentActivity.map((item, i) => (
               <div key={i} className={`px-4 py-3 flex items-center gap-3 ${i > 0 ? 'border-t border-gray-50' : ''}`}>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${

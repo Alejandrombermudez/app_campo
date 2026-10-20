@@ -269,7 +269,7 @@ function RemoteEvalCard({
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+    <div className="tarjeta overflow-hidden">
       <button onClick={handleVer} disabled={deleting}
         className="w-full text-left px-4 pt-4 pb-3 active:bg-gray-50 disabled:opacity-60">
         <div className="flex items-center justify-between gap-2 mb-0.5">
@@ -316,7 +316,7 @@ function RemoteEncCard({
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+    <div className="tarjeta overflow-hidden">
       <button onClick={handleVer} disabled={deleting}
         className="w-full text-left px-4 pt-4 pb-3 active:bg-gray-50 disabled:opacity-60">
         <div className="flex items-center justify-between gap-2 mb-0.5">
@@ -586,20 +586,24 @@ export function Home() {
     <div className="min-h-screen bg-transparent flex flex-col">
 
       {/* Header */}
-      <header className="bg-bosque text-white px-4 py-4">
-        <div className="flex items-center justify-between">
+      <header className="cabecera rounded-b-[2rem] px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-4 relative overflow-hidden">
+        {/* Los anillos de la huella, apenas visibles: el motivo de la marca */}
+        <div aria-hidden className="pointer-events-none absolute -right-16 -top-16 w-56 h-56 rounded-full opacity-[0.12]"
+          style={{ background: 'repeating-radial-gradient(circle, #fffdf9 0 1.5px, transparent 2px 14px)' }} />
+        <div className="flex items-start justify-between gap-3 relative">
           <div>
-            <h1 className="text-lg font-bold">Familias Resilientes</h1>
-            <p className="text-xs opacity-75">Hola, {userName}</p>
+            <p className="rotulo !text-[10px] !text-amber-200">Amazonía Emprende · Campo</p>
+            <h1 className="text-[1.65rem] leading-tight">Familias Resilientes</h1>
+            <p className="text-sm opacity-85">Hola, {userName}</p>
           </div>
-          <span className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full ${online ? 'bg-emerald-500/30 text-emerald-100' : 'bg-red-500/30 text-red-100'}`}>
-            {online ? <Wifi size={12}/> : <WifiOff size={12}/>}
-            {online ? 'Online' : 'Sin internet'}
+          <span className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-full vidrio-oscuro ${online ? 'text-emerald-100' : 'text-amber-200'}`}>
+            {online ? <Wifi size={13}/> : <WifiOff size={13}/>}
+            {online ? 'Con señal' : 'Sin señal'}
           </span>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 mt-3 bg-black/20 p-1 rounded-xl">
+        <div className="flex gap-1 mt-4 vidrio-oscuro p-1 rounded-2xl relative">
           {([
             ['mios',    <User size={13}/>,      'Mis registros', totalLocalCount],
             ['predios', <MapPin size={13}/>,    'Predios',        0],
@@ -607,7 +611,7 @@ export function Home() {
             ['stats',   <BarChart2 size={13}/>, 'Estadísticas',   0],
           ] as const).map(([key, icon, label, count]) => (
             <button key={key} onClick={() => setTab(key)}
-              className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-1.5 rounded-lg transition-colors ${tab === key ? 'bg-white text-bosque' : 'text-white/80'}`}>
+              className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 text-[11px] sm:text-xs font-semibold min-h-12 py-1.5 rounded-xl transition-colors ${tab === key ? 'bg-hueso text-bosque shadow-md' : 'text-white/85'}`}>
               {icon} {label}
               {count > 0 && (
                 <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${tab === key ? 'bg-bosque text-white' : 'bg-white/20'}`}>{count}</span>
@@ -621,11 +625,10 @@ export function Home() {
 
       {/* Barra de sync */}
       {pendingLocal > 0 && online && (
-        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 flex items-center justify-between">
-          <span className="text-xs text-amber-700">{pendingLocal} registro(s) pendiente(s)</span>
-          <button onClick={handleSync} disabled={syncing}
-            className="flex items-center gap-1 text-xs font-semibold text-amber-700 bg-amber-100 px-3 py-1 rounded-lg">
-            <RefreshCw size={12} className={syncing ? 'animate-spin' : ''}/>
+        <div className="tarjeta mx-4 mt-3 px-4 py-2.5 flex items-center justify-between gap-3">
+          <span className="text-sm text-amber-900 font-medium">{pendingLocal} registro(s) por subir</span>
+          <button onClick={handleSync} disabled={syncing} className="boton boton-ambar !min-h-11 !px-4 !text-sm">
+            <RefreshCw size={15} className={syncing ? 'animate-spin' : ''}/>
             {syncing ? 'Sincronizando…' : 'Sincronizar'}
           </button>
         </div>

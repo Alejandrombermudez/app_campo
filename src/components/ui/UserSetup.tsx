@@ -29,7 +29,7 @@ export function UserSetup({ onComplete }: Props) {
     const final = normalizar(name)
     return (
       <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6">
-        <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-5">
+        <div className="vidrio rounded-3xl w-full max-w-sm p-6 space-y-5">
           <div className="flex flex-col items-center gap-3">
             <div className="w-14 h-14 rounded-full bg-amber-50 flex items-center justify-center">
               <Lock size={26} className="text-amber-600" />
@@ -49,7 +49,7 @@ export function UserSetup({ onComplete }: Props) {
           <div className="space-y-2">
             <button
               onClick={confirmar}
-              className="w-full bg-bosque text-white py-3 rounded-xl font-semibold"
+              className="boton boton-bosque w-full"
             >
               Sí, este es mi nombre — continuar
             </button>
@@ -67,7 +67,7 @@ export function UserSetup({ onComplete }: Props) {
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-5">
+      <div className="vidrio rounded-3xl w-full max-w-sm p-6 space-y-5">
         <div className="flex flex-col items-center gap-3">
           <div className="w-14 h-14 rounded-full bg-bosque/10 flex items-center justify-center">
             <User size={28} className="text-bosque" />
@@ -92,7 +92,7 @@ export function UserSetup({ onComplete }: Props) {
         <button
           onClick={irAConfirmar}
           disabled={!normalizar(name)}
-          className="w-full bg-bosque text-white py-3 rounded-xl font-semibold disabled:opacity-40"
+          className="boton boton-bosque w-full"
         >
           Continuar
         </button>

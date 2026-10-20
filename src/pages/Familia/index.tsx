@@ -19,8 +19,8 @@ function FichaPredio({
 }) {
   return (
     <div className="min-h-screen flex flex-col bg-transparent">
-      <header className="bg-bosque text-white px-4 py-3 flex items-center gap-3">
-        <button onClick={onBack} className="p-1 rounded"><ArrowLeft size={20} /></button>
+      <header className="cabecera rounded-b-3xl px-3 pt-[max(env(safe-area-inset-top),0.75rem)] pb-4 flex items-center gap-3">
+        <button onClick={onBack} className="boton-mapa vidrio-oscuro !w-11 !h-11" aria-label="Volver"><ArrowLeft size={20} /></button>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm truncate">{familia.nombre_predio || '(Sin nombre)'}</p>
           <p className="text-xs opacity-60">Datos de Jurídica + SIG (solo lectura)</p>
@@ -39,20 +39,20 @@ function FichaPredio({
           </div>
         )}
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 space-y-2">
+        <div className="tarjeta px-4 py-4 space-y-2">
           <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Predio</p>
           <p className="text-base font-semibold text-gray-800">{familia.nombre_predio || '—'}</p>
           <p className="text-sm text-gray-600">{familia.municipio}{familia.vereda && ` · ${familia.vereda}`}</p>
           <p className="text-xs text-gray-400">{familia.departamento}</p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 space-y-2">
+        <div className="tarjeta px-4 py-4 space-y-2">
           <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Propietario / aliado</p>
           <p className="text-sm font-semibold text-gray-800">{familia.nombre_propietario || '—'}</p>
           {familia.contacto && <p className="text-sm text-gray-600">{familia.contacto}</p>}
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 space-y-2">
+        <div className="tarjeta px-4 py-4 space-y-2">
           <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Zonas del SIG</p>
           {familia.zonas_sig.length === 0 ? (
             <p className="text-sm text-gray-500">El SIG aún no ha subido zonas potenciales para este predio.</p>
