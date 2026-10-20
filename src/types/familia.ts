@@ -1,4 +1,4 @@
-import type { PredioHabilitado, ZonaSig, ZonaFinca } from './core'
+import type { PredioHabilitado, ZonaSig, ZonaFinca, FlujoCampo } from './core'
 
 // ─── Entidad padre: Familia / Predio ─────────────────────────────────────────
 // Ya NO se crea en blanco: nace de un PredioHabilitado (core.v_predios_campo),
@@ -36,6 +36,10 @@ export interface FamiliaRecord {
 
   fecha: string   // fecha de la visita/encuesta — esto sí lo define el encuestador
 
+  // «campo_primero»: el predio llegó sin propuesta del SIG y en terreno se
+  // delimitan el predio y las zonas desde cero. Ausente = el flujo de siempre.
+  flujo_campo?: FlujoCampo
+
   // Última vez que se contrastó el snapshot de zonas contra el SIG con el
   // botón "Actualizar desde el SIG" (lib/actualizarSig.ts). null = nunca,
   // sigue con lo que se descargó al abrir el predio.
@@ -49,10 +53,12 @@ export interface FamiliaRecord {
 
 /** Crea la familia de trabajo local a partir de un predio ya habilitado (Jurídica+SIG). */
 export function newFamiliaDesdeHabilitado(p: PredioHabilitado): FamiliaRecord {
-  // SIG I es obligatorio: un predio sin zonas reales no debería llegar aquí
-  // (el picker y la vista core.v_predios_campo ya lo filtran). Se deja el
-  // chequeo explícito en vez de fabricar una zona falsa si algo se rompe.
-  if (p.zonas.length === 0) {
+  // SIG I es obligatorio en el flujo de siempre: un predio sin zonas reales no
+  // debería llegar aquí (el picker y la vista core.v_predios_campo ya lo
+  // filtran). Se deja el chequeo explícito en vez de fabricar una zona falsa si
+  // algo se rompe. En «campo primero» no hay zonas a propósito: las dibuja el
+  // terreno en el módulo SIG — tampoco aquí se fabrica ninguna.
+  if (p.zonas.length === 0 && p.flujo_campo !== 'campo_primero') {
     throw new Error(`El predio "${p.nombre_predio}" no tiene zonas de SIG (geo.zonas) — no se puede abrir en Campo todavía.`)
   }
   return {
@@ -81,5 +87,6 @@ export function newFamiliaDesdeHabilitado(p: PredioHabilitado): FamiliaRecord {
     num_zonas:          p.zonas.length,
 
     fecha:              new Date().toISOString().slice(0, 10),
+    flujo_campo:        p.flujo_campo ?? 'sig_primero',
   }
 }

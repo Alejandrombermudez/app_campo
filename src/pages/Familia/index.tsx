@@ -18,8 +18,8 @@ function FichaPredio({
   onActualizado: () => void | Promise<void>
 }) {
   return (
-    <div className="min-h-screen flex flex-col bg-[#f0fafa]">
-      <header className="bg-[#0d7377] text-white px-4 py-3 flex items-center gap-3">
+    <div className="min-h-screen flex flex-col bg-transparent">
+      <header className="bg-bosque text-white px-4 py-3 flex items-center gap-3">
         <button onClick={onBack} className="p-1 rounded"><ArrowLeft size={20} /></button>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm truncate">{familia.nombre_predio || '(Sin nombre)'}</p>
@@ -132,7 +132,13 @@ export function SelectorPredios({
     try {
       // Reutilizar si ya se había abierto antes en este dispositivo
       const existing = await db.familias.where('predio_core_id').equals(p.predio_id).first()
-      if (existing) { navigate(`/familia/${existing.local_id}`); return }
+      if (existing) {
+        // El flujo lo decide la intranet al enviar el predio: si cambió, se toma el nuevo.
+        if (p.flujo_campo && existing.flujo_campo !== p.flujo_campo) {
+          await db.familias.update(existing.id!, { flujo_campo: p.flujo_campo })
+        }
+        navigate(`/familia/${existing.local_id}`); return
+      }
 
       const familia = newFamiliaDesdeHabilitado(p)
       await db.familias.add(familia)
@@ -145,13 +151,13 @@ export function SelectorPredios({
   }
 
   return (
-    <div className={embedded ? 'flex flex-col' : 'min-h-screen flex flex-col bg-[#f0fafa]'}>
+    <div className={embedded ? 'flex flex-col' : 'min-h-screen flex flex-col bg-transparent'}>
       {!embedded && (
-        <header className="bg-[#0d7377] text-white px-4 py-3 flex items-center gap-3">
-          <button onClick={() => navigate('/')} className="p-1 rounded"><ArrowLeft size={20} /></button>
+        <header className="cabecera rounded-b-3xl px-3 pt-[max(env(safe-area-inset-top),0.75rem)] pb-4 flex items-center gap-3">
+          <button onClick={() => navigate('/')} className="boton-mapa vidrio-oscuro !w-11 !h-11" aria-label="Volver"><ArrowLeft size={20} /></button>
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-sm">Predios habilitados para Campo</p>
-            <p className="text-xs opacity-60">Ya pasaron por Jurídica + SIG</p>
+            <h1 className="text-xl leading-tight">Predios para campo</h1>
+            <p className="text-xs opacity-80">Enviados desde la intranet: con propuesta del SIG o para delimitar en terreno</p>
           </div>
         </header>
       )}
@@ -170,7 +176,7 @@ export function SelectorPredios({
             placeholder="Buscar por predio, propietario, municipio..."
             value={query}
             onChange={e => setQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#0d7377]"
+            className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-bosque"
           />
         </div>
       </div>
@@ -178,7 +184,7 @@ export function SelectorPredios({
       <main className={`flex-1 px-4 pb-10 space-y-2 ${embedded ? '' : 'overflow-y-auto'}`}>
         {loading && predios.length === 0 ? (
           <div className="flex justify-center py-16">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0d7377]" />
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-bosque" />
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3 text-gray-400">
@@ -197,18 +203,29 @@ export function SelectorPredios({
                 key={p.predio_id}
                 onClick={() => handleSelect(p)}
                 disabled={opening !== null}
-                className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-3.5 flex items-center gap-3 text-left active:bg-gray-50 disabled:opacity-60"
+                className="tarjeta w-full px-4 py-3.5 flex items-center gap-3 text-left active:scale-[0.99] transition-transform disabled:opacity-60"
               >
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-gray-800 truncate">{p.nombre_predio}</p>
-                  <p className="text-xs text-gray-500 truncate">{p.nombre_propietario}</p>
-                  <p className="text-xs text-gray-400 truncate">
+                  <p className="font-semibold text-[15px] text-gray-900 truncate">{p.nombre_predio}</p>
+                  <p className="text-sm text-gray-600 truncate">{p.nombre_propietario}</p>
+                  <p className="text-xs text-gray-500 truncate">
                     {p.municipio}{p.vereda && ` · ${p.vereda}`} · {p.etapa === 'campo' ? 'Habilitado' : 'SIG II'}
                   </p>
+                  <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                    {p.flujo_campo === 'campo_primero' ? (
+                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900">
+                        Campo primero · se delimita en terreno
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
+                        {p.zonas.length} sitio(s) propuestos por el SIG
+                      </span>
+                    )}
+                  </div>
                   {(status?.campo || status?.predial) && (
                     <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                       {status.campo && (
-                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#0d7377]/10 text-[#0d7377]">
+                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-bosque/10 text-bosque">
                           Campo ya diligenciado · {status.campo}
                         </span>
                       )}
@@ -221,7 +238,7 @@ export function SelectorPredios({
                   )}
                 </div>
                 {opening === p.predio_id
-                  ? <Loader2 size={18} className="text-[#0d7377] animate-spin flex-shrink-0" />
+                  ? <Loader2 size={18} className="text-bosque animate-spin flex-shrink-0" />
                   : <CheckCircle2 size={18} className="text-gray-200 flex-shrink-0" />}
               </button>
             )
@@ -253,14 +270,14 @@ export function FamiliaPage() {
 
   if (!loaded) return (
     <div className="min-h-screen flex items-center justify-center">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0d7377]" />
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-bosque" />
     </div>
   )
 
   if (!familia) return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-4 text-gray-500 px-8">
       <p className="text-sm text-center">Familia no encontrada.</p>
-      <button onClick={() => navigate('/')} className="text-[#0d7377] text-sm font-semibold">Ir al inicio</button>
+      <button onClick={() => navigate('/')} className="text-bosque text-sm font-semibold">Ir al inicio</button>
     </div>
   )
 

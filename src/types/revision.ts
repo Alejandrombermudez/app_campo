@@ -5,12 +5,24 @@
 // la geometría ORIGINAL en geo.zona_revision y aplica el cambio a geo.zonas.
 export type RevisionAccion = 'confirmada' | 'modificada' | 'nueva' | 'descartada'
 
+/**
+ * Sobre qué se actúa: un sitio de siembra o el límite del predio. Las
+ * revisiones guardadas antes del 2026-10-20 no lo traen y son todas de sitios
+ * de siembra (`tipoRevision` lo resuelve). Las de límite viajan por el RPC
+ * geo.revisar_zona_campo; las de sitios siguen por geo.revisar_zona.
+ */
+export type TipoRevision = 'restauracion' | 'finca'
+export function tipoRevision(r: Pick<RevisionRecord, 'tipo'>): TipoRevision {
+  return r.tipo === 'finca' ? 'finca' : 'restauracion'
+}
+
 export interface RevisionRecord {
   id?: number
   local_id: string                     // UUID — llave de idempotencia del sync
   familia_local_id: string             // FK a FamiliaRecord.local_id
   predio_core_id: string               // core.predios.id
   zona_id: string | null               // geo.zonas.id (null en 'nueva' hasta sincronizar)
+  tipo?: TipoRevision                  // ausente = 'restauracion' (registros anteriores)
   accion: RevisionAccion
   metodo: 'vertices' | 'gps' | 'nueva' | null
   geojson: string | null               // geometría corregida/nueva (GeoJSON 4326)
@@ -83,6 +95,7 @@ export function newRevision(base: {
   area_ha: number | null
   zona_numero: number
   observaciones?: string
+  tipo?: TipoRevision
 }): RevisionRecord {
   return {
     local_id:    crypto.randomUUID(),

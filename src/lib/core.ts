@@ -63,13 +63,30 @@ export async function fetchZonasPredio(predioId: string): Promise<{ siembra: Zon
   }
 }
 
+/**
+ * Lee la vista con `flujo_campo`. Si la BD todavía no tiene
+ * migration_campo_primero.sql, la columna no existe (42703): se repite sin
+ * ella y todo se trata como «SIG primero», que es lo que había. Así esta
+ * versión de la app puede salir antes que la migración sin dejar a nadie sin
+ * predios.
+ */
+async function leerPrediosCampo(predioId?: string) {
+  const consulta = (cols: string) => {
+    const q = prediosCampoTable().select(cols)
+    return predioId ? q.eq('predio_id', predioId) : q.order('nombre_predio', { ascending: true })
+  }
+  const r = await consulta(`${COLUMNAS_PREDIO}, flujo_campo`)
+  if (r.error && (r.error.code === '42703' || /flujo_campo/.test(r.error.message ?? ''))) {
+    return consulta(COLUMNAS_PREDIO)
+  }
+  return r
+}
+
 /** Descarga los predios habilitados + sus zonas SIG (con geometría) y los deja en caché (Dexie) para uso offline. */
 export async function refreshPrediosHabilitados(): Promise<PredioHabilitado[]> {
   if (!navigator.onLine) return getPrediosHabilitadosCache()
 
-  const { data, error } = await prediosCampoTable()
-    .select(COLUMNAS_PREDIO)
-    .order('nombre_predio', { ascending: true })
+  const { data, error } = await leerPrediosCampo()
 
   if (error || !data) {
     console.error('[core] refreshPrediosHabilitados error:', error?.message)
@@ -79,12 +96,14 @@ export async function refreshPrediosHabilitados(): Promise<PredioHabilitado[]> {
   const cachedAt = new Date().toISOString()
   const withZonas: PredioHabilitado[] = []
   try {
-    for (const p of data) {
+    for (const p of data as unknown as PredioCampoRow[]) {
       const { siembra, finca } = await fetchZonasPredio(p.predio_id)
-      // SIG I es obligatorio: la vista ya lo exige (EXISTS geo.zonas), pero se
-      // repite aquí como cinturón de seguridad — nunca ofrecer un predio sin
-      // zonas reales, aunque la vista quede desactualizada o falle el filtro.
-      if (siembra.length === 0) continue
+      // SIG I es obligatorio en el flujo de siempre: la vista ya lo exige
+      // (EXISTS geo.zonas), pero se repite aquí como cinturón de seguridad —
+      // nunca ofrecer un predio sin zonas reales, aunque la vista quede
+      // desactualizada o falle el filtro. La única excepción es un predio
+      // enviado como «campo primero»: ahí las zonas las dibuja el terreno.
+      if (siembra.length === 0 && p.flujo_campo !== 'campo_primero') continue
       withZonas.push({ ...p, cached_at: cachedAt, zonas: siembra, zonas_finca: finca })
     }
   } catch (err) {
@@ -107,10 +126,8 @@ export async function refreshPrediosHabilitados(): Promise<PredioHabilitado[]> {
  * pudiendo consultar. Lanza solo si la consulta misma falla.
  */
 export async function fetchPredioCampo(predioId: string): Promise<PredioCampoRow | null> {
-  const { data, error } = await prediosCampoTable()
-    .select(COLUMNAS_PREDIO)
-    .eq('predio_id', predioId)
-    .maybeSingle()
+  const { data: filas, error } = await leerPrediosCampo(predioId)
+  const data = (filas as unknown as PredioCampoRow[] | null)?.[0] ?? null
 
   if (error) {
     console.error('[core] fetchPredioCampo error:', error.message)

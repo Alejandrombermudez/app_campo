@@ -2,6 +2,7 @@ import { db } from '../db/schema'
 import { supabase, evalTable } from './supabase'
 import type { PhotoRecord, ZonaData, EvaluacionRecord } from '../types/evaluacion'
 import { vincularZonaNueva } from '../types/evaluacion'
+import { tipoRevision } from '../types/revision'
 import type { CultivoRow, EncuestaPredialRecord } from '../types/encuesta'
 
 function encTable()     { return supabase.schema('siembra').from('familias') }
@@ -138,7 +139,9 @@ async function geojsonLocalDeZona(
 ): Promise<string | null> {
   if (!zonaId) return null
   const fam = await db.familias.where('local_id').equals(familiaLocalId).first()
-  return fam?.zonas_sig.find(z => z.zona_id === zonaId)?.geojson ?? null
+  return fam?.zonas_sig.find(z => z.zona_id === zonaId)?.geojson
+    ?? (fam?.zonas_finca ?? []).find(f => f.zona_id === zonaId)?.geojson
+    ?? null
 }
 
 /**
@@ -153,6 +156,11 @@ async function remapearZonaId(
   if (fam?.zonas_sig.some(z => z.zona_id === viejo)) {
     await db.familias.update(fam.id!, {
       zonas_sig: fam.zonas_sig.map(z => z.zona_id === viejo ? { ...z, zona_id: nuevo } : z),
+    })
+  }
+  if (fam && (fam.zonas_finca ?? []).some(f => f.zona_id === viejo)) {
+    await db.familias.update(fam.id!, {
+      zonas_finca: fam.zonas_finca.map(f => f.zona_id === viejo ? { ...f, zona_id: nuevo } : f),
     })
   }
 
@@ -225,14 +233,28 @@ export async function syncPendingRevisiones(): Promise<{ synced: number; errors:
         p_fecha:         rev.fecha || null,
       }
 
-      let { data: zonaId, error } = await supabase.schema('geo')
-        .rpc('revisar_zona', { ...args, p_geojson_respaldo: respaldo })
+      let zonaId: unknown, error: { message?: string; details?: string; hint?: string; code?: string } | null
 
-      // Si el servidor todavía tiene la firma vieja de 9 argumentos
-      // (migration_geo_versionado.sql sin correr), reintentar sin el respaldo
-      // en vez de dejar la revisión atascada.
-      if (error && (error.code === 'PGRST202' || /function .*revisar_zona/i.test(error.message ?? ''))) {
-        ({ data: zonaId, error } = await supabase.schema('geo').rpc('revisar_zona', args))
+      if (tipoRevision(rev) === 'finca') {
+        // El límite del predio solo entra por geo.revisar_zona_campo (lleva el
+        // tipo). Si la BD aún no tiene migration_campo_primero.sql, la revisión
+        // NO se pierde: queda en el celular con el error y se reintenta en la
+        // próxima sincronización, como cualquier otra.
+        ({ data: zonaId, error } = await supabase.schema('geo')
+          .rpc('revisar_zona_campo', { ...args, p_tipo: 'finca', p_geojson_respaldo: respaldo }))
+        if (error && (error.code === 'PGRST202' || /revisar_zona_campo/i.test(error.message ?? ''))) {
+          throw new Error('El servidor todavía no recibe límites dibujados en campo (falta migration_campo_primero.sql). El límite sigue guardado en este celular y se sube solo cuando esté lista.')
+        }
+      } else {
+        ({ data: zonaId, error } = await supabase.schema('geo')
+          .rpc('revisar_zona', { ...args, p_geojson_respaldo: respaldo }))
+
+        // Si el servidor todavía tiene la firma vieja de 9 argumentos
+        // (migration_geo_versionado.sql sin correr), reintentar sin el respaldo
+        // en vez de dejar la revisión atascada.
+        if (error && (error.code === 'PGRST202' || /function .*revisar_zona/i.test(error.message ?? ''))) {
+          ({ data: zonaId, error } = await supabase.schema('geo').rpc('revisar_zona', args))
+        }
       }
 
       if (error) {
@@ -248,7 +270,7 @@ export async function syncPendingRevisiones(): Promise<{ synced: number; errors:
         await remapearZonaId(rev.familia_local_id, rev.zona_id, idAplicado)
       }
       // Zona dibujada en campo: el servidor acaba de darle su zona_id.
-      if (idAplicado && !rev.zona_id && rev.accion === 'nueva') {
+      if (idAplicado && !rev.zona_id && rev.accion === 'nueva' && tipoRevision(rev) === 'restauracion') {
         await vincularEvaluacionZonaNueva(rev.familia_local_id, rev.local_id, idAplicado)
       }
 

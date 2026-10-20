@@ -7,7 +7,7 @@ import type { EvaluacionRecord, ZonaData } from '../../types/evaluacion'
 import { reconciliarZonas } from '../../types/evaluacion'
 import type { EncuestaPredialRecord, CultivoRow } from '../../types/encuesta'
 import type { RevisionRecord } from '../../types/revision'
-import { zonasActivas, zonasVigentes } from '../../lib/geo'
+import { zonasActivas, zonasVigentes, limitesVigentes } from '../../lib/geo'
 import { buscarDiligenciamientoPropio } from '../../lib/core'
 import { ActualizarSigCard } from '../../components/ui/ActualizarSig'
 
@@ -96,6 +96,8 @@ export function FamiliaDetail() {
   // Zonas que se evaluarán en terreno: las del SIG + correcciones locales
   // (módulo SIG), sin las descartadas.
   const activas = familia ? zonasActivas(familia, revisiones) : []
+  const nLimites = familia ? limitesVigentes(familia, revisiones).length : 0
+  const campoPrimero = familia?.flujo_campo === 'campo_primero'
 
   // ─── Abrir / crear evaluación de campo ──────────────────────────────────────
   // SIG I es obligatorio: las zonas NO se inventan, son las que el SIG ya
@@ -219,14 +221,14 @@ export function FamiliaDetail() {
   // ─── Loading / not found ─────────────────────────────────────────────────────
   if (!loaded) return (
     <div className="min-h-screen flex items-center justify-center">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0d7377]" />
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-bosque" />
     </div>
   )
 
   if (!familia) return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-4 text-gray-500 px-8">
       <p className="text-sm text-center">Familia no encontrada.</p>
-      <button onClick={() => navigate('/')} className="text-[#0d7377] text-sm font-semibold">
+      <button onClick={() => navigate('/')} className="text-bosque text-sm font-semibold">
         Ir al inicio
       </button>
     </div>
@@ -245,33 +247,39 @@ export function FamiliaDetail() {
     : 'en_curso'
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f0fafa]">
+    <div className="min-h-screen flex flex-col bg-transparent">
 
       {/* Header */}
-      <header className="bg-[#0d7377] text-white px-4 py-3 flex items-center gap-3">
-        <button onClick={() => navigate('/')} className="p-1 rounded">
+      <header className="cabecera rounded-b-3xl px-3 pt-[max(env(safe-area-inset-top),0.75rem)] pb-4 flex items-center gap-3">
+        <button onClick={() => navigate('/')} className="boton-mapa vidrio-oscuro !w-11 !h-11" aria-label="Volver">
           <ArrowLeft size={20} />
         </button>
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-sm truncate">{familia.nombre_predio || 'Familia'}</p>
-          <p className="text-xs opacity-60">
+          <h1 className="text-xl leading-tight truncate">{familia.nombre_predio || 'Predio'}</h1>
+          <p className="text-xs opacity-80">
             {familia.municipio}{familia.vereda && ` · ${familia.vereda}`}
           </p>
         </div>
         <button
           onClick={() => navigate(`/familia/${familia.local_id}/editar`)}
-          className="p-2 rounded-lg bg-white/15 hover:bg-white/25 transition-colors"
-          title="Editar datos de la familia"
+          className="boton-mapa vidrio-oscuro !w-11 !h-11"
+          title="Ver la ficha del predio" aria-label="Ver la ficha del predio"
         >
-          <Pencil size={16} />
+          <Pencil size={18} />
         </button>
       </header>
 
       <main className="flex-1 px-4 py-5 space-y-4">
 
         {/* Resumen de la familia */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 space-y-1">
-          <p className="text-lg font-bold text-gray-800">{familia.nombre_predio}</p>
+        <div className="tarjeta px-4 py-4 space-y-1">
+          {campoPrimero && (
+            <p className="text-[13px] text-amber-900 bg-amber-100 border border-amber-200 rounded-2xl px-3 py-2 mb-2">
+              <strong>Campo primero:</strong> en esta visita se delimita el predio y se dibujan los sitios de siembra (Módulo SIG).
+              Después, la evaluación de esos sitios y la encuesta, como siempre.
+            </p>
+          )}
+          <h2 className="text-xl text-gray-900">{familia.nombre_predio}</h2>
           <p className="text-sm text-gray-600">{familia.nombre_propietario}</p>
           <p className="text-xs text-gray-400">
             {familia.municipio}{familia.vereda && ` · ${familia.vereda}`}
@@ -287,12 +295,12 @@ export function FamiliaDetail() {
         <ActualizarSigCard familia={familia} onActualizado={cargar} />
 
         {/* Formularios hijos */}
-        <p className="text-xs font-bold uppercase tracking-widest text-gray-400 px-1">Formularios</p>
+        <p className="rotulo px-1">En esta visita</p>
 
         {/* Módulo SIG — mapa, geolocalización y corrección de zonas */}
         <button
           onClick={() => navigate(`/sig/${familia.local_id}`)}
-          className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 flex items-center gap-3 active:bg-gray-50"
+          className="tarjeta w-full px-4 py-4 flex items-center gap-3 active:scale-[0.99] transition-transform"
         >
           <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center flex-shrink-0">
             <Satellite size={20} className="text-teal-600" />
@@ -300,10 +308,12 @@ export function FamiliaDetail() {
           <div className="flex-1 text-left min-w-0">
             <p className="text-sm font-semibold text-gray-800">Módulo SIG</p>
             <p className="text-xs text-gray-500 mb-1">
-              Mapa satelital · GPS a las zonas · corregir límites
+              {campoPrimero
+                ? 'Delimitar el predio y dibujar los sitios de siembra'
+                : 'Mapa satelital · GPS a las zonas · corregir límites'}
             </p>
             <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 font-medium">
-              {activas.length} zona{activas.length !== 1 ? 's' : ''} de siembra
+              {nLimites ? 'Con límite' : 'Sin límite'} · {activas.length} zona{activas.length !== 1 ? 's' : ''} de siembra
               {revisiones.filter(r => r.sync_status !== 'synced').length > 0 &&
                 ` · ${revisiones.filter(r => r.sync_status !== 'synced').length} cambio(s) por sincronizar`}
             </span>
@@ -315,18 +325,18 @@ export function FamiliaDetail() {
         <button
           onClick={openCampo}
           disabled={creating || activas.length === 0}
-          className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 flex items-center gap-3 active:bg-gray-50 disabled:opacity-60"
+          className="tarjeta w-full px-4 py-4 flex items-center gap-3 active:scale-[0.99] transition-transform disabled:opacity-60"
         >
-          <div className="w-10 h-10 rounded-xl bg-[#0d7377]/10 flex items-center justify-center flex-shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-bosque/10 flex items-center justify-center flex-shrink-0">
             {creating
-              ? <Loader2 size={20} className="text-[#0d7377] animate-spin" />
-              : <ClipboardList size={20} className="text-[#0d7377]" />}
+              ? <Loader2 size={20} className="text-bosque animate-spin" />
+              : <ClipboardList size={20} className="text-bosque" />}
           </div>
           <div className="flex-1 text-left min-w-0">
             <p className="text-sm font-semibold text-gray-800">Evaluación de Campo</p>
             <p className="text-xs text-gray-500 mb-1">
               {activas.length === 0
-                ? 'Sin zonas activas — revisa el módulo SIG'
+                ? (campoPrimero ? 'Primero dibuja los sitios de siembra en el Módulo SIG' : 'Sin zonas activas — revisa el módulo SIG')
                 : `AE-CAMPO-001 · ${activas.length} zona${activas.length > 1 ? 's' : ''}`}
             </p>
             <StatusBadge status={campoStatus} />
@@ -338,7 +348,7 @@ export function FamiliaDetail() {
         <button
           onClick={openPredial}
           disabled={creating}
-          className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 flex items-center gap-3 active:bg-gray-50 disabled:opacity-60"
+          className="tarjeta w-full px-4 py-4 flex items-center gap-3 active:scale-[0.99] transition-transform disabled:opacity-60"
         >
           <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
             {creating

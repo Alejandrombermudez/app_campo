@@ -10,6 +10,7 @@ import type { Feature, Geometry, MultiPolygon, Polygon, LineString, MultiLineStr
 import type { FamiliaRecord } from '../types/familia'
 import type { ZonaSig } from '../types/core'
 import type { RevisionRecord } from '../types/revision'
+import { tipoRevision } from '../types/revision'
 
 // ─── Zona tal como se ve HOY en campo: original del SIG + revisiones locales ──
 export interface ZonaVigente {
@@ -38,8 +39,11 @@ export interface ZonaVigente {
 export function zonasVigentes(familia: FamiliaRecord, revisiones: RevisionRecord[]): ZonaVigente[] {
   const porZona = new Map<string, RevisionRecord>()
   const nuevas: RevisionRecord[] = []
-  // La última revisión por zona gana (el usuario puede corregir varias veces)
-  for (const r of [...revisiones].sort((a, b) => a.updated_at.localeCompare(b.updated_at))) {
+  // La última revisión por zona gana (el usuario puede corregir varias veces).
+  // Las del límite del predio van aparte (`limitesVigentes`): si entraran aquí,
+  // su zona_id no estaría en zonas_sig y saldrían como un sitio «retirado».
+  const deSitios = revisiones.filter(r => tipoRevision(r) === 'restauracion')
+  for (const r of [...deSitios].sort((a, b) => a.updated_at.localeCompare(b.updated_at))) {
     if (r.accion === 'nueva' && !r.zona_id) nuevas.push(r)
     else if (r.zona_id) porZona.set(r.zona_id, r)
   }
@@ -89,6 +93,57 @@ export function zonasVigentes(familia: FamiliaRecord, revisiones: RevisionRecord
     }))
 
   return [...base, ...extra, ...huerfanas].map((z, i) => ({ ...z, zona_numero: i + 1 }))
+}
+
+// ─── Límite del predio tal como se ve HOY en campo ─────────────────────────────
+export interface LimiteVigente {
+  zona_id: string | null        // null: dibujado en campo y aún sin sincronizar
+  numero: number                // 1, 2… (un predio puede venir con varios polígonos)
+  geojson: string
+  area_ha: number | null
+  revision: RevisionRecord | null
+  origen: 'sig' | 'campo'       // quién trazó la geometría que se ve
+}
+
+/**
+ * Límite del predio = snapshot del SIG (`zonas_finca`) + revisiones locales de
+ * tipo 'finca'. Mismas reglas que las zonas: la última revisión de cada
+ * polígono manda, y una geometría dibujada en campo nunca se pierde por una
+ * acción posterior (eso lo garantiza `fusionarRevision` al guardar).
+ */
+export function limitesVigentes(familia: FamiliaRecord, revisiones: RevisionRecord[]): LimiteVigente[] {
+  const deLimite = revisiones
+    .filter(r => tipoRevision(r) === 'finca')
+    .sort((a, b) => a.updated_at.localeCompare(b.updated_at))
+  const porZona = new Map<string, RevisionRecord>()
+  const nuevas: RevisionRecord[] = []
+  for (const r of deLimite) {
+    if (r.accion === 'nueva' && !r.zona_id) nuevas.push(r)
+    else if (r.zona_id) porZona.set(r.zona_id, r)
+  }
+  const fincas = familia.zonas_finca ?? []
+  const ids = new Set(fincas.map(f => f.zona_id))
+  const base: LimiteVigente[] = fincas.map(f => {
+    const rev = porZona.get(f.zona_id) ?? null
+    return {
+      zona_id: f.zona_id, numero: 0,
+      geojson: rev?.geojson ?? f.geojson,
+      area_ha: rev?.area_ha ?? f.area_ha,
+      revision: rev,
+      origen: rev?.geojson ? 'campo' : 'sig',
+    }
+  })
+  // Límite que campo trabajó y ya no viene en el snapshot (p. ej. sincronizado
+  // y aún sin refrescar): se sigue viendo, no desaparece.
+  const sueltos: LimiteVigente[] = [...porZona.entries()]
+    .filter(([id, r]) => !ids.has(id) && !!r.geojson)
+    .map(([id, r]) => ({ zona_id: id, numero: 0, geojson: r.geojson!, area_ha: r.area_ha, revision: r, origen: 'campo' as const }))
+  const dibujados: LimiteVigente[] = nuevas.map(r => ({
+    zona_id: null, numero: 0, geojson: r.geojson ?? '', area_ha: r.area_ha, revision: r, origen: 'campo' as const,
+  }))
+  return [...base, ...sueltos, ...dibujados]
+    .filter(l => l.revision?.accion !== 'descartada' && !!l.geojson)
+    .map((l, i) => ({ ...l, numero: i + 1 }))
 }
 
 /** Zonas activas (sin descartadas) — lo que la evaluación de campo debe recorrer. */

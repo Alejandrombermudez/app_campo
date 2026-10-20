@@ -205,7 +205,9 @@ export async function consultarCambiosSig(familia: FamiliaRecord): Promise<Resul
 
   // ─── Bloqueos y advertencias ─────────────────────────────────────────────────
   let bloqueo: string | null = null
-  if (zonasRemotas.length === 0) {
+  // En «campo primero» cero zonas es lo normal mientras campo no sincronice
+  // las suyas, y el celular tampoco tiene zonas del SIG que perder: no se bloquea.
+  if (zonasRemotas.length === 0 && familia.zonas_sig.length > 0) {
     // Defensa dura: el SIG respondió "cero zonas". Aplicar eso dejaría el
     // predio sin nada que evaluar. Se prefiere no tocar y avisar.
     bloqueo = 'El SIG respondió que este predio no tiene zonas de siembra. No se actualizó nada — repórtalo al equipo SIG antes de seguir.'
@@ -272,6 +274,7 @@ export async function aplicarCambiosSig(familia: FamiliaRecord, diff: DiffSig): 
       vereda:             diff.identidad.vereda,
       departamento:       diff.identidad.departamento,
       contacto:           diff.identidad.telefono ?? familia.contacto,
+      flujo_campo:        diff.identidad.flujo_campo ?? familia.flujo_campo,
     } : {}),
     sig_actualizado_at: ahora,
     updated_at:         ahora,
@@ -292,7 +295,7 @@ export function sigCambioRespectoA(familia: FamiliaRecord, fresco: PredioHabilit
   if (!fresco || familia.es_practica || !familia.predio_core_id) return false
   // Una descarga que trajo cero zonas no es un cambio: es lo que
   // `consultarCambiosSig` bloquea para no vaciar el predio.
-  if (fresco.zonas.length === 0) return false
+  if (fresco.zonas.length === 0 && familia.zonas_sig.length > 0) return false
 
   const locales = new Map(familia.zonas_sig.map(z => [z.zona_id, z]))
   if (fresco.zonas.length !== familia.zonas_sig.length) return true
