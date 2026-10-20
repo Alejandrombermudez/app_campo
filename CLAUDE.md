@@ -15,6 +15,11 @@ Un predio solo aparece en esta app si **Jurídica aprobó Y SIG subió ≥1 zona
 "Enviar a Campo" en la intranet** (regla de negocio explícita del usuario — SIG I es obligatorio, doble
 candado API + vista SQL). La app **nunca** crea predios ni zonas en blanco.
 
+**Excepción explícita: «campo primero» (2026-10-20, rama `campo-primero-ldh`).** Si la intranet envía el
+predio con «Enviar campo primero» (`core.expedientes.flujo_campo = 'campo_primero'`), llega sin zonas y en
+terreno se dibujan el **límite del predio** y los **sitios de siembra** desde cero; el SIG confirma después.
+Sigue sin crear predios: el predio existe en jurídica, lo que se dibuja son geometrías por revisiones.
+
 Tres módulos por predio: **SIG** (verificar/corregir zonas de siembra en terreno, SIG II) · **Evaluación de Campo**
 (AE-CAMPO-001) · **Encuesta Predial** (socioeconómica).
 
@@ -77,6 +82,34 @@ La fusión vive ahora en `fusionarRevision` (`types/revision.ts`), función pura
 Confirmar una zona ya corregida la deja en `modificada` — la única acción con la que `geo.revisar_zona`
 escribe la geometría nueva. En la UI, una zona con corrección local pendiente muestra "Ya corregida"
 (deshabilitado) en vez de ofrecer el botón que la destruía.
+
+## Campo primero: límite del predio y sitios desde cero (2026-10-20)
+
+Mismo módulo SIG, no uno aparte (es el mismo mapa, el mismo GPS y la misma cola de revisiones; un segundo
+camino a `geo.zonas` es justo la clase de bug que ya costó correcciones). Lo que cambió:
+
+- `PredioHabilitado.flujo_campo` / `FamiliaRecord.flujo_campo`. `lib/core.ts` lo pide a la vista y, si la BD no
+  tiene `migration_campo_primero.sql` (42703), repite sin la columna: todo queda «SIG primero» como antes.
+- `RevisionRecord.tipo`: `'restauracion'` (sitio, y todas las revisiones viejas que no lo traen) o `'finca'`
+  (límite del predio). `zonasVigentes` **ignora** las de límite —si no, su `zona_id` saldría como un sitio
+  «retirado del SIG»— y `limitesVigentes` las resuelve aparte con las mismas reglas.
+- Las revisiones de límite viajan por **`geo.revisar_zona_campo`** (con `p_tipo`); las de sitios siguen por
+  `geo.revisar_zona`, sin cambio. Si el RPC nuevo no existe, la revisión queda en el celular con el aviso y se
+  reintenta en cada sincronización: no se pierde.
+- Módulo SIG: dos capas («Sitios de siembra» / «Límite del predio»), dibujo sobre el satelital o **trazado
+  caminando** (un vértice por «Marcar punto» con el GPS, `metodo='gps'`). `fusionarRevision` aplica igual al
+  límite: confirmar no borra un límite corregido.
+- «Actualizar desde el SIG» solo bloquea el «cero zonas» si el celular tenía zonas del SIG que perder.
+- Pruebas sin red: `npm run pruebas` (rolldown + stubs de Dexie y Supabase en `scripts/`).
+
+## Estilo (2026-10-20)
+
+Paleta del manual 2024 y las familias de Tailwind remapeadas a la marca en `src/index.css` (como la intranet):
+`gray` cálido, `emerald`/`teal` bosque, `amber` ámbar, `red` arcilla, `blue` pizarra. Utilidades propias:
+`cabecera`, `vidrio`, `vidrio-oscuro`, `tarjeta`, `rotulo`, `boton` + `boton-bosque|ambar|pizarra|arcilla|vidrio`,
+`boton-mapa`. Poppins + Fraunces van **dentro** de la app (`src/assets/fuentes`, solo latín) para que existan sin
+señal. Los colores del mapa NO pasan por la paleta (son los de `lib/colores-campo.ts` de la intranet).
+No escribas hexadecimales en clases: usa `bosque`, `ambar`, `hueso`…
 
 ## Reglas
 
