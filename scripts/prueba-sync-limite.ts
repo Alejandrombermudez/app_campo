@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- prueba con tablas de mentira */
 // Prueba de la cola sin señal para el límite del predio (flujo «campo primero»),
 // con Dexie y Supabase de mentira (scripts/stubs). Nunca sale a la red.
 // Correr:  npx rolldown -c scripts/rolldown.pruebas.mjs && node <salida>
