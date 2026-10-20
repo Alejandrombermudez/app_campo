@@ -33,7 +33,7 @@ interface RecentItem {
 }
 
 // ─── Barra de progreso simple ───────────────────────────────────────────────
-function Bar({ pct, color = 'bg-[#0d7377]' }: { pct: number; color?: string }) {
+function Bar({ pct, color = 'bg-bosque' }: { pct: number; color?: string }) {
   return (
     <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
       <div className={`${color} h-2 rounded-full transition-all duration-500`} style={{ width: `${Math.min(100, pct)}%` }} />
@@ -43,7 +43,7 @@ function Bar({ pct, color = 'bg-[#0d7377]' }: { pct: number; color?: string }) {
 
 // ─── Tarjeta de métrica ─────────────────────────────────────────────────────
 function MetricCard({
-  label, value, sub, color = 'text-[#0d7377]'
+  label, value, sub, color = 'text-bosque'
 }: { label: string; value: string | number; sub?: string; color?: string }) {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4">
@@ -181,7 +181,7 @@ export function StatsTab() {
 
   if (loading) return (
     <div className="flex justify-center py-16">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0d7377]" />
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-bosque" />
     </div>
   )
 
@@ -196,7 +196,7 @@ export function StatsTab() {
       {/* Actualizar */}
       <button
         onClick={load}
-        className="flex items-center gap-1.5 text-xs text-[#0d7377] font-medium ml-auto"
+        className="flex items-center gap-1.5 text-xs text-bosque font-medium ml-auto"
       >
         <RefreshCw size={13} /> Actualizar
       </button>
@@ -254,7 +254,7 @@ export function StatsTab() {
                   <Bar pct={(total / maxMuni) * 100} />
                   <div className="flex gap-3 mt-1">
                     {m.evaluaciones > 0 && (
-                      <span className="text-[10px] text-[#0d7377]">
+                      <span className="text-[10px] text-bosque">
                         {m.evaluaciones} eval.
                       </span>
                     )}
@@ -303,7 +303,7 @@ export function StatsTab() {
             <div>
               <div className="flex justify-between items-center mb-1">
                 <span className="text-xs text-gray-600">Familias con ganadería</span>
-                <span className="text-xs font-bold text-[#0d7377]">{data.pctGanaderia}%</span>
+                <span className="text-xs font-bold text-bosque">{data.pctGanaderia}%</span>
               </div>
               <Bar pct={data.pctGanaderia} />
             </div>
@@ -331,7 +331,7 @@ export function StatsTab() {
               <div key={i} className={`px-4 py-3 flex items-center gap-3 ${i > 0 ? 'border-t border-gray-50' : ''}`}>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${
                   item.tipo === 'eval'
-                    ? 'bg-[#0d7377]/10 text-[#0d7377]'
+                    ? 'bg-bosque/10 text-bosque'
                     : 'bg-emerald-100 text-emerald-700'
                 }`}>
                   {item.tipo === 'eval' ? 'EVAL' : 'ENC'}

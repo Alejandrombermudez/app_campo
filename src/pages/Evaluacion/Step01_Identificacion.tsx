@@ -23,7 +23,7 @@ export function Step01({ data, onChange }: Props) {
 
   return (
     <div className="space-y-5">
-      <h2 className="text-base font-semibold text-[#0d7377]">§1 Identificación</h2>
+      <h2 className="text-base font-semibold text-bosque">§1 Identificación</h2>
 
       <div className="grid grid-cols-2 gap-4">
         <Field label="Código formato">

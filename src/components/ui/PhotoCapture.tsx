@@ -101,7 +101,7 @@ export function PhotoCapture({
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={loading}
-          className="w-full border-2 border-dashed border-gray-300 rounded-lg py-6 flex flex-col items-center gap-2 text-gray-500 hover:border-[#0d7377] hover:text-[#0d7377] transition-colors"
+          className="w-full border-2 border-dashed border-gray-300 rounded-lg py-6 flex flex-col items-center gap-2 text-gray-500 hover:border-bosque hover:text-bosque transition-colors"
         >
           {loading ? <Loader2 size={24} className="animate-spin" /> : <Camera size={24} />}
           <span className="text-sm">{loading ? 'Procesando…' : 'Tomar foto / Galería'}</span>
@@ -122,7 +122,7 @@ export function PhotoCapture({
           <button
             type="button"
             onClick={() => setShowRef(true)}
-            className="flex items-center gap-1 text-xs text-[#0d7377] underline"
+            className="flex items-center gap-1 text-xs text-bosque underline"
           >
             <Eye size={13} /> {referenceLabel ?? 'Ver imagen de referencia'}
           </button>

@@ -1,51 +1,396 @@
 @import "tailwindcss";
 
-:root {
-  --primary: #0d7377;
-  --primary-dark: #0a5c5f;
-  --primary-light: #14a8ad;
-  --primary-50: #f0fafa;
+/* ═══════════════════════════════════════════════════════════════════════════
+   SISTEMA VISUAL DE LA APP DE CAMPO (2026-10-20)
+   Manual de Identidad de Marca 2024, en la misma línea que la intranet
+   (rediseño del 2026-10-15): Poppins para el texto, Fraunces para los títulos,
+   paleta hueso · verde bosque · ámbar y superficies de vidrio.
+
+   Diferencias con la intranet, porque esto se usa a pleno sol y en celulares
+   modestos sin señal:
+     · el vidrio es más opaco (se lee al sol) y el desenfoque es más corto;
+       solo lo llevan la cabecera, las barras flotantes del mapa y las
+       ventanas, no cada tarjeta (backdrop-filter cuesta en un gama baja);
+     · los botones son grandes (48 px mínimo) y con contraste alto;
+     · las fuentes van dentro de la app (src/assets/fuentes, solo latín:
+       ~95 KB) para que existan sin señal; no se piden a Google.
+
+   Como en la intranet, las familias de Tailwind que ya usaba el código están
+   REMAPEADAS a la marca, así una pantalla escrita hace meses sale en la
+   paleta sin tocarla:
+     gray ............ neutros cálidos (papel → tinta)
+     emerald, teal ... verde bosque y salvia
+     amber ........... ámbar / ocre
+     red ............. arcilla, el rojo terroso de los errores
+     blue, indigo .... azul pizarra
+     purple .......... musgo
+   OJO: los colores del MAPA (estado de cada zona sobre el satelital) no pasan
+   por aquí: son hexadecimales en pages/Sig y son los mismos que pinta la
+   intranet (lib/colores-campo.ts allá). Tienen que leerse sobre la imagen.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fuentes/poppins-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./assets/fuentes/poppins-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./assets/fuentes/poppins-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./assets/fuentes/poppins-latin-700-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Fraunces';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('./assets/fuentes/fraunces-latin-soft-normal.woff2') format('woff2-variations');
 }
 
-* {
-  box-sizing: border-box;
+@theme {
+  --font-sans:   'Poppins', ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-titulo: 'Fraunces', Georgia, 'Times New Roman', serif;
+
+  /* ── La paleta del manual, con nombre propio ───────────────────────────── */
+  --color-hueso:   #e4ded2;
+  --color-tinta:   #1e1a18;
+  --color-bosque:  #2f3f32;
+  --color-bosque-claro:  #405644;
+  --color-bosque-oscuro: #222e25;
+  --color-pizarra: #385161;
+  --color-taupe:   #b8a28e;
+  --color-oliva:   #3a382d;
+  --color-musgo:   #7a7847;
+  --color-cielo:   #7ca9cd;
+  --color-marron:  #7e5f3b;
+  --color-ambar:   #e1a644;
+  --color-ambar-oscuro: #ab7420;
+  --color-salvia:  #afbdb2;
+  --color-celeste: #b7cdde;
+  --color-papel:   #f4f1ea;
+  --color-suave:   #4a453f;
+  --color-tenue:   #6b6458;
+  --color-linea:   #d8d1c4;
+  --color-fina:    #e6e0d5;
+
+  /* ── Neutros cálidos ───────────────────────────────────────────────────── */
+  --color-gray-50:  #faf8f3;
+  --color-gray-100: #f4f1ea;
+  --color-gray-200: #e6e0d5;
+  --color-gray-300: #d8d1c4;
+  --color-gray-400: #9a9182;
+  --color-gray-500: #6b6458;
+  --color-gray-600: #554f46;
+  --color-gray-700: #433e38;
+  --color-gray-800: #2f2a25;
+  --color-gray-900: #1e1a18;
+  --color-gray-950: #141210;
+  --color-white: #fffdf9;
+  --color-black: #1e1a18;
+
+  /* ── Verde bosque / salvia ─────────────────────────────────────────────── */
+  --color-emerald-50:  #eef2ed;
+  --color-emerald-100: #dde5db;
+  --color-emerald-200: #c3d0c3;
+  --color-emerald-300: #a3b5a5;
+  --color-emerald-400: #7c937f;
+  --color-emerald-500: #58705c;
+  --color-emerald-600: #405644;
+  --color-emerald-700: #2f3f32;
+  --color-emerald-800: #263428;
+  --color-emerald-900: #1e2920;
+  --color-teal-50:  #eef2ed;
+  --color-teal-100: #dde5db;
+  --color-teal-200: #c3d0c3;
+  --color-teal-300: #a3b5a5;
+  --color-teal-400: #7c937f;
+  --color-teal-500: #58705c;
+  --color-teal-600: #405644;
+  --color-teal-700: #2f3f32;
+  --color-teal-800: #263428;
+  --color-teal-900: #1e2920;
+
+  /* ── Ámbar / ocre ──────────────────────────────────────────────────────── */
+  --color-amber-50:  #fcf6ea;
+  --color-amber-100: #f8eacd;
+  --color-amber-200: #f1d7a0;
+  --color-amber-300: #eac074;
+  --color-amber-400: #e1a644;
+  --color-amber-500: #cc8f2c;
+  --color-amber-600: #ab7420;
+  --color-amber-700: #8a5f14;
+  --color-amber-800: #6d4b13;
+  --color-amber-900: #533a12;
+
+  /* ── Arcilla (errores, descartar) ──────────────────────────────────────── */
+  --color-red-50:  #f9efec;
+  --color-red-100: #f1dcd5;
+  --color-red-200: #e3b9ab;
+  --color-red-300: #cf9480;
+  --color-red-400: #b86f58;
+  --color-red-500: #a1553f;
+  --color-red-600: #8b4431;
+  --color-red-700: #713628;
+  --color-red-800: #582b21;
+  --color-red-900: #41201a;
+
+  /* ── Azul pizarra / cielo ──────────────────────────────────────────────── */
+  --color-blue-50:  #eff4f8;
+  --color-blue-100: #dde8f0;
+  --color-blue-200: #bfd3e3;
+  --color-blue-300: #9ebcd6;
+  --color-blue-400: #7ca9cd;
+  --color-blue-500: #5b8aad;
+  --color-blue-600: #47708f;
+  --color-blue-700: #385161;
+  --color-blue-800: #2e4250;
+  --color-blue-900: #23323d;
+  --color-indigo-50:  #eff4f8;
+  --color-indigo-100: #dde8f0;
+  --color-indigo-500: #5b8aad;
+  --color-indigo-600: #47708f;
+  --color-indigo-700: #385161;
+
+  /* ── Musgo ─────────────────────────────────────────────────────────────── */
+  --color-purple-50:  #f3f2ea;
+  --color-purple-100: #e6e4d1;
+  --color-purple-200: #d1ceac;
+  --color-purple-500: #7a7847;
+  --color-purple-600: #66643b;
+  --color-purple-700: #545331;
+
+  /* ── Esquinas redondeadas y sombras cálidas ────────────────────────────── */
+  --radius-lg:  12px;
+  --radius-xl:  16px;
+  --radius-2xl: 20px;
+  --radius-3xl: 26px;
+  --shadow-sm:  0 1px 2px 0 rgb(30 26 24 / 0.05), 0 6px 16px -8px rgb(30 26 24 / 0.16);
+  --shadow:     0 1px 2px 0 rgb(30 26 24 / 0.05), 0 6px 16px -8px rgb(30 26 24 / 0.16);
+  --shadow-md:  0 2px 4px -1px rgb(30 26 24 / 0.06), 0 12px 24px -12px rgb(30 26 24 / 0.22);
+  --shadow-lg:  0 4px 8px -2px rgb(30 26 24 / 0.08), 0 18px 36px -16px rgb(30 26 24 / 0.28);
+  --shadow-xl:  0 8px 16px -6px rgb(30 26 24 / 0.10), 0 26px 50px -20px rgb(30 26 24 / 0.32);
+
+  /* Poppins se carga de 400 a 700: font-black no debe inventar una negrita. */
+  --font-weight-extrabold: 700;
+  --font-weight-black:     700;
 }
 
-body {
-  margin: 0;
-  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
-  background: var(--primary-50);
-  color: #1a1a2e;
-  -webkit-font-smoothing: antialiased;
+@layer base {
+  * { box-sizing: border-box; }
+
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    color: #1e1a18;
+    background-color: #ebe5d9;
+    /* Fondo de la marca, quieto y barato: manchas de salvia, ámbar y celeste
+       sobre hueso. Sin imágenes ni animación. */
+    background-image:
+      radial-gradient(60% 40% at 0% 0%,     rgb(175 189 178 / 0.85), transparent 70%),
+      radial-gradient(50% 35% at 100% 12%,  rgb(225 166 68 / 0.28),  transparent 70%),
+      radial-gradient(60% 40% at 100% 100%, rgb(183 205 222 / 0.70), transparent 72%),
+      radial-gradient(50% 35% at 0% 90%,    rgb(175 189 178 / 0.55), transparent 70%);
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  #root { min-height: 100svh; }
+
+  /* Títulos: Fraunces con el eje SOFT, como en la intranet. */
+  h1, h2, .font-titulo {
+    font-family: var(--font-titulo);
+    font-variation-settings: "SOFT" 70;
+    letter-spacing: -0.01em;
+  }
+
+  ::selection { background: #2f3f32; color: #f4f1ea; }
+  input, select, textarea { accent-color: #2f3f32; }
+  :focus-visible { outline: 3px solid #e1a644; outline-offset: 2px; }
+  input:focus-visible, select:focus-visible, textarea:focus-visible { outline: none; }
+
+  /* Campos: blancos y opacos (se escriben al sol), borde visible, 16 px para
+     que el celular no haga zoom al tocarlos. */
+  input[type="text"],
+  input[type="number"],
+  input[type="date"],
+  input[type="tel"],
+  input[type="email"],
+  select,
+  textarea {
+    width: 100%;
+    padding: 0.65rem 0.85rem;
+    border: 1.5px solid #cfc6b6;
+    border-radius: 0.85rem;
+    font-size: 1rem;
+    font-family: inherit;
+    color: #1e1a18;
+    background: #fffdf9;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  input:focus, select:focus, textarea:focus {
+    border-color: #2f3f32;
+    box-shadow: 0 0 0 3px rgb(225 166 68 / 0.35);
+  }
+  input::placeholder, textarea::placeholder { color: #8a8273; }
+
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgb(47 63 50 / 0.3); border-radius: 2px; }
 }
 
-#root {
-  min-height: 100svh;
+/* ── Vidrio ──────────────────────────────────────────────────────────────── */
+/* Claro: barras y paneles que flotan sobre el mapa o el fondo. Opaco de sobra
+   para leerse al sol; si el celular no sabe desenfocar, queda igual de legible. */
+@utility vidrio {
+  background-color: rgb(255 253 249 / 0.86);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  backdrop-filter: blur(12px) saturate(1.4);
+  border: 1px solid rgb(255 255 255 / 0.75);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.8), 0 10px 28px -14px rgb(30 26 24 / 0.35);
+}
+/* Oscuro: sobre la cabecera en verde bosque. */
+@utility vidrio-oscuro {
+  background-color: rgb(255 255 255 / 0.12);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgb(255 255 255 / 0.18);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.14);
+}
+/* Cabecera: el panel en verde bosque, con un brillo cálido arriba. */
+@utility cabecera {
+  background-color: #2f3f32;
+  background-image:
+    radial-gradient(120% 140% at 100% 0%, rgb(225 166 68 / 0.22), transparent 55%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.06), transparent 60%);
+  color: #fffdf9;
+  box-shadow: 0 10px 24px -14px rgb(30 26 24 / 0.55);
 }
 
-/* Scrollbar sutil */
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #0d737740; border-radius: 2px; }
-
-/* Input base */
-input[type="text"],
-input[type="number"],
-input[type="date"],
-input[type="tel"],
-select,
-textarea {
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid #d1d5db;
-  border-radius: 0.5rem;
-  font-size: 0.9rem;
-  font-family: inherit;
-  background: white;
-  outline: none;
-  transition: border-color 0.15s;
+/* ── Botones con carácter ────────────────────────────────────────────────── */
+/* Píldora, 48 px de alto mínimo, borde de luz arriba y sombra de base: se
+   «hunden» al tocarlos. Variantes: boton-bosque (acción principal), boton-ambar
+   (la acción de campo: dibujar, marcar), boton-vidrio (secundaria),
+   boton-arcilla (descartar). */
+@utility boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 3rem;
+  padding: 0.7rem 1.25rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  line-height: 1.15;
+  letter-spacing: 0.005em;
+  transition: transform 0.08s ease, box-shadow 0.12s ease, filter 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+  &:active:not(:disabled) { transform: translateY(1px) scale(0.985); }
+  &:disabled { opacity: 0.45; }
 }
-input:focus, select:focus, textarea:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 2px #0d737720;
+@utility boton-bosque {
+  background: linear-gradient(180deg, #3d5241, #2f3f32 60%, #283629);
+  color: #fffdf9;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18), 0 2px 0 #1b241d, 0 8px 18px -8px rgb(30 26 24 / 0.55);
+  &:active:not(:disabled) { box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12), 0 1px 0 #1b241d, 0 4px 10px -6px rgb(30 26 24 / 0.5); }
+}
+@utility boton-ambar {
+  background: linear-gradient(180deg, #ecbb62, #e1a644 55%, #d39433);
+  color: #1e1a18;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.45), 0 2px 0 #9a6a1d, 0 8px 18px -8px rgb(138 95 20 / 0.6);
+  &:active:not(:disabled) { box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.3), 0 1px 0 #9a6a1d, 0 4px 10px -6px rgb(138 95 20 / 0.5); }
+}
+@utility boton-vidrio {
+  background-color: rgb(255 253 249 / 0.9);
+  color: #2f3f32;
+  border: 1.5px solid rgb(47 63 50 / 0.22);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.9), 0 2px 0 rgb(47 63 50 / 0.12), 0 8px 16px -10px rgb(30 26 24 / 0.35);
+}
+@utility boton-arcilla {
+  background: linear-gradient(180deg, #ad6049, #a1553f 55%, #8b4431);
+  color: #fffdf9;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18), 0 2px 0 #5e2d22, 0 8px 18px -8px rgb(65 32 26 / 0.55);
+}
+@utility boton-pizarra {
+  background: linear-gradient(180deg, #47708f, #385161 60%, #2e4250);
+  color: #fffdf9;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18), 0 2px 0 #1f2d37, 0 8px 18px -8px rgb(23 33 41 / 0.55);
+}
+/* Botón redondo de mapa (centrar, dibujar…): 52 px, fácil con el pulgar. */
+@utility boton-mapa {
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.08s ease;
+  &:active { transform: scale(0.94); }
+}
+
+/* Tarjeta de la marca: hueso claro casi opaco, sin desenfoque (barata). */
+@utility tarjeta {
+  background-color: rgb(255 253 249 / 0.9);
+  border: 1px solid rgb(255 255 255 / 0.8);
+  border-radius: 1.25rem;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.9), 0 1px 2px rgb(30 26 24 / 0.05), 0 12px 28px -18px rgb(30 26 24 / 0.35);
+}
+
+/* Rótulo pequeño en mayúsculas para encabezar secciones. */
+@utility rotulo {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #6b6458;
+}
+
+@layer utilities {
+  /* Las tarjetas blancas de siempre toman el tono de la marca (sin desenfoque). */
+  .bg-white:where(:not(input, select, textarea, option, .leaflet-container *)) {
+    background-color: rgb(255 253 249 / 0.92);
+  }
+}
+
+/* Leaflet: controles de zoom en la misma línea. */
+.leaflet-bar a, .leaflet-bar a:hover {
+  width: 44px !important;
+  height: 44px !important;
+  line-height: 44px !important;
+  font-size: 20px !important;
+  color: #2f3f32 !important;
+  background: rgb(255 253 249 / 0.92) !important;
+}
+.leaflet-bar { border: none !important; border-radius: 14px !important; overflow: hidden; box-shadow: 0 10px 24px -12px rgb(30 26 24 / 0.5) !important; }
+
+/* Sin transparencias si la persona las pidió quitar, o si el celular no sabe
+   desenfocar: el vidrio se vuelve una superficie opaca igual de legible. */
+@media (prefers-reduced-transparency: reduce) {
+  .vidrio, .tarjeta, .boton-vidrio { background-color: #fffdf9 !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .vidrio { background-color: #fffdf9; }
 }

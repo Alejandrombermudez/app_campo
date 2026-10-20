@@ -19,7 +19,7 @@ export function InstallBanner() {
   // Android con prompt nativo
   if (canInstall) {
     return (
-      <div className="mx-4 mt-3 bg-[#0d7377] text-white rounded-2xl p-4 flex items-start gap-3 shadow-md">
+      <div className="mx-4 mt-3 bg-bosque text-white rounded-2xl p-4 flex items-start gap-3 shadow-md">
         <Download size={20} className="flex-shrink-0 mt-0.5" />
         <div className="flex-1">
           <p className="font-semibold text-sm">Instalar app en tu dispositivo</p>
@@ -28,7 +28,7 @@ export function InstallBanner() {
           </p>
           <button
             onClick={() => prompt?.()}
-            className="mt-2 bg-white text-[#0d7377] text-xs font-bold px-4 py-1.5 rounded-lg"
+            className="mt-2 bg-white text-bosque text-xs font-bold px-4 py-1.5 rounded-lg"
           >
             Instalar
           </button>
@@ -43,7 +43,7 @@ export function InstallBanner() {
   // iOS Safari — instrucciones manuales
   if (platform === 'ios') {
     return (
-      <div className="mx-4 mt-3 bg-[#0d7377] text-white rounded-2xl p-4 shadow-md">
+      <div className="mx-4 mt-3 bg-bosque text-white rounded-2xl p-4 shadow-md">
         <div className="flex items-start gap-3">
           <Download size={20} className="flex-shrink-0 mt-0.5" />
           <div className="flex-1">
@@ -75,7 +75,7 @@ export function InstallBanner() {
   // Android sin prompt (Chrome, Samsung Browser, etc.)
   if (platform === 'android') {
     return (
-      <div className="mx-4 mt-3 bg-[#0d7377] text-white rounded-2xl p-4 shadow-md">
+      <div className="mx-4 mt-3 bg-bosque text-white rounded-2xl p-4 shadow-md">
         <div className="flex items-start gap-3">
           <Download size={20} className="flex-shrink-0 mt-0.5" />
           <div className="flex-1">

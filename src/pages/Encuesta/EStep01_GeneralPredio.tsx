@@ -17,7 +17,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="space-y-4">
-      <h3 className="text-xs font-bold uppercase tracking-widest text-[#0d7377] border-b border-[#0d7377]/20 pb-1">{title}</h3>
+      <h3 className="text-xs font-bold uppercase tracking-widest text-bosque border-b border-bosque/20 pb-1">{title}</h3>
       {children}
     </div>
   )
@@ -30,7 +30,7 @@ export function EStep01({ data, onChange }: Props) {
   const s = (k: keyof EncuestaGeneral, v: unknown) => onChange({ ...data, [k]: v })
   return (
     <div className="space-y-6">
-      <h2 className="text-base font-semibold text-[#0d7377]">§1 Datos Generales</h2>
+      <h2 className="text-base font-semibold text-bosque">§1 Datos Generales</h2>
 
       <Section title="Identificación de la encuesta">
         <div className="grid grid-cols-2 gap-3">
@@ -49,7 +49,7 @@ export function EStep01({ data, onChange }: Props) {
         </Field>
       </Section>
 
-      <h2 className="text-base font-semibold text-[#0d7377]">§2 Datos del Predio</h2>
+      <h2 className="text-base font-semibold text-bosque">§2 Datos del Predio</h2>
 
       <Section title="Estrato del paisaje">
         <RadioGrp

@@ -23,7 +23,7 @@ export function Step02({ data, onChange }: Props) {
 
   return (
     <div className="space-y-5">
-      <h2 className="text-base font-semibold text-[#0d7377]">§2 Cartografía Social</h2>
+      <h2 className="text-base font-semibold text-bosque">§2 Cartografía Social</h2>
 
       <Field label="Disposición del propietario">
         <RadioGrp

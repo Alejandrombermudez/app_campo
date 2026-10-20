@@ -9,14 +9,14 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   return <div className="space-y-1.5"><label className="block text-sm font-medium text-gray-700">{label}</label>{hint && <p className="text-xs text-gray-400">{hint}</p>}{children}</div>
 }
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return <div className="space-y-4"><h3 className="text-xs font-bold uppercase tracking-widest text-[#0d7377] border-b border-[#0d7377]/20 pb-1">{title}</h3>{children}</div>
+  return <div className="space-y-4"><h3 className="text-xs font-bold uppercase tracking-widest text-bosque border-b border-bosque/20 pb-1">{title}</h3>{children}</div>
 }
 
 export function EStep07({ data, onChange }: Props) {
   const s = (k: keyof EncuestaTecnologia, v: unknown) => onChange({ ...data, [k]: v })
   return (
     <div className="space-y-6">
-      <h2 className="text-base font-semibold text-[#0d7377]">§7 Nivel Tecnológico</h2>
+      <h2 className="text-base font-semibold text-bosque">§7 Nivel Tecnológico</h2>
 
       <Section title="Maquinaria y equipo">
         <Field label="¿Qué maquinaria, instalaciones y equipos tiene?">

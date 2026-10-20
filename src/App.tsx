@@ -54,7 +54,7 @@ export default function App() {
         <Route path="/sig/:id" element={
           <Suspense fallback={
             <div className="min-h-screen flex items-center justify-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0d7377]" />
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-bosque" />
             </div>
           }>
             <SigPage />

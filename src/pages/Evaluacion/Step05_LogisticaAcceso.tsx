@@ -25,7 +25,7 @@ export function Step05({ zona, localEvaluacionId, data, onChange }: Props) {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-base font-semibold text-[#0d7377]">§5 Logística y Acceso — Zona {zona}</h2>
+      <h2 className="text-base font-semibold text-bosque">§5 Logística y Acceso — Zona {zona}</h2>
 
       {/* ── 1. Punto de acceso / vía pública + FOTO ───────────────────────── */}
       <Field label="Punto de acceso más cercano (vía pública)">

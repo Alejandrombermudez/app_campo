@@ -18,14 +18,14 @@ export function ChkGroup({ opts, val, onChange, cols = 2 }: ChkGroupProps) {
           onClick={() => toggle(o)}
           className={`py-2 px-3 rounded-lg border text-sm font-medium transition-all text-left flex items-center gap-2 ${
             val.includes(o)
-              ? 'bg-[#0d7377] border-[#0d7377] text-white'
-              : 'bg-white border-gray-200 text-gray-700 hover:border-[#0d7377]'
+              ? 'bg-bosque border-bosque text-white'
+              : 'bg-white border-gray-200 text-gray-700 hover:border-bosque'
           }`}
         >
           <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${
             val.includes(o) ? 'bg-white border-white' : 'border-gray-400'
           }`}>
-            {val.includes(o) && <span className="text-[#0d7377] text-xs font-bold">✓</span>}
+            {val.includes(o) && <span className="text-bosque text-xs font-bold">✓</span>}
           </span>
           {o}
         </button>

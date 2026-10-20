@@ -164,28 +164,28 @@ export function PredioPage() {
 
   if (!loaded) return (
     <div className="min-h-screen flex items-center justify-center">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0d7377]" />
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-bosque" />
     </div>
   )
 
   if (done) return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 gap-6">
-      <CheckCircle size={64} className="text-[#0d7377]" />
-      <h1 className="text-xl font-bold text-center text-[#0d7377]">¡Formulario guardado!</h1>
+      <CheckCircle size={64} className="text-bosque" />
+      <h1 className="text-xl font-bold text-center text-bosque">¡Formulario guardado!</h1>
       <p className="text-gray-600 text-center text-sm">
         Los datos se sincronizarán automáticamente cuando haya internet.
       </p>
-      <button onClick={() => navigate('/')} className="bg-[#0d7377] text-white px-6 py-3 rounded-xl font-semibold">
+      <button onClick={() => navigate('/')} className="bg-bosque text-white px-6 py-3 rounded-xl font-semibold">
         Ir al inicio
       </button>
     </div>
   )
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f0fafa]">
+    <div className="min-h-screen flex flex-col bg-transparent">
 
       {/* Header */}
-      <header className="bg-[#0d7377] text-white px-4 py-3 flex items-center gap-3">
+      <header className="bg-bosque text-white px-4 py-3 flex items-center gap-3">
         <button onClick={() => navigate('/')} className="p-1 rounded"><ArrowLeft size={20} /></button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
@@ -290,7 +290,7 @@ export function PredioPage() {
           </button>
         )}
         <button onClick={saveAndNext} disabled={saving}
-          className="flex-1 flex items-center justify-center gap-2 bg-[#0d7377] text-white py-3 rounded-xl font-semibold text-sm">
+          className="flex-1 flex items-center justify-center gap-2 bg-bosque text-white py-3 rounded-xl font-semibold text-sm">
           {saving ? <span className="animate-pulse">Guardando…</span>
             : stepIdx === total - 1 ? <><Save size={16} /> Finalizar</>
             : <>Siguiente <ArrowRight size={16} /></>}

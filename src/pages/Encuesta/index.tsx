@@ -121,20 +121,20 @@ export function EncuestaPage() {
 
   if (!loaded) return (
     <div className="min-h-screen flex items-center justify-center">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0d7377]" />
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-bosque" />
     </div>
   )
 
   if (done) return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 gap-6">
-      <CheckCircle size={64} className="text-[#0d7377]" />
-      <h1 className="text-xl font-bold text-center text-[#0d7377]">¡Encuesta guardada!</h1>
+      <CheckCircle size={64} className="text-bosque" />
+      <h1 className="text-xl font-bold text-center text-bosque">¡Encuesta guardada!</h1>
       <p className="text-gray-600 text-center text-sm">
         Los datos se sincronizarán automáticamente cuando haya internet.
       </p>
       <button
         onClick={() => navigate(ev.familia_local_id ? `/familia/${ev.familia_local_id}` : '/')}
-        className="bg-[#0d7377] text-white px-6 py-3 rounded-xl font-semibold"
+        className="bg-bosque text-white px-6 py-3 rounded-xl font-semibold"
       >
         {ev.familia_local_id ? 'Volver a la familia' : 'Ir al inicio'}
       </button>
@@ -142,8 +142,8 @@ export function EncuestaPage() {
   )
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f0fafa]">
-      <header className="bg-[#0d7377] text-white px-4 py-3 flex items-center gap-3">
+    <div className="min-h-screen flex flex-col bg-transparent">
+      <header className="bg-bosque text-white px-4 py-3 flex items-center gap-3">
         <button onClick={() => navigate('/')} className="p-1 rounded"><ArrowLeft size={20} /></button>
         <div className="flex-1 min-w-0">
           <p className="text-xs opacity-80 truncate">{ev.nombre_propietario || 'Nueva encuesta predial'}</p>
@@ -172,7 +172,7 @@ export function EncuestaPage() {
           </button>
         )}
         <button onClick={saveAndNext} disabled={saving}
-          className="flex-1 flex items-center justify-center gap-2 bg-[#0d7377] text-white py-3 rounded-xl font-semibold text-sm">
+          className="flex-1 flex items-center justify-center gap-2 bg-bosque text-white py-3 rounded-xl font-semibold text-sm">
           {saving ? <span className="animate-pulse">Guardando…</span>
             : stepIdx === total - 1 ? <><Save size={16} /> Finalizar</>
             : <>Siguiente <ArrowRight size={16} /></>}

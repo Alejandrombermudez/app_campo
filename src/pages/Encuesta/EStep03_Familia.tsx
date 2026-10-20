@@ -9,7 +9,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return <div className="space-y-1.5"><label className="block text-sm font-medium text-gray-700">{label}</label>{children}</div>
 }
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return <div className="space-y-4"><h3 className="text-xs font-bold uppercase tracking-widest text-[#0d7377] border-b border-[#0d7377]/20 pb-1">{title}</h3>{children}</div>
+  return <div className="space-y-4"><h3 className="text-xs font-bold uppercase tracking-widest text-bosque border-b border-bosque/20 pb-1">{title}</h3>{children}</div>
 }
 
 const emptyMiembro = (): MiembroFamilia => ({
@@ -30,7 +30,7 @@ export function EStep03({ data, onChange }: Props) {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-base font-semibold text-[#0d7377]">§4 Información del Núcleo Familiar</h2>
+      <h2 className="text-base font-semibold text-bosque">§4 Información del Núcleo Familiar</h2>
 
       <Section title="Población">
         <Field label="En los últimos 10 años, el número de personas en la finca se ha:">
@@ -108,7 +108,7 @@ export function EStep03({ data, onChange }: Props) {
         <button
           type="button"
           onClick={addMiembro}
-          className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-[#0d7377]/30 rounded-xl py-3 text-sm text-[#0d7377]"
+          className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-bosque/30 rounded-xl py-3 text-sm text-bosque"
         >
           <Plus size={16} /> Agregar miembro
         </button>

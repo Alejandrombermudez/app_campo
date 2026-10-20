@@ -28,7 +28,7 @@ export function Step03({ zona, data, onChange }: Props) {
 
   return (
     <div className="space-y-5">
-      <h2 className="text-base font-semibold text-[#0d7377]">§3 Cobertura Vegetal — Zona {zona}</h2>
+      <h2 className="text-base font-semibold text-bosque">§3 Cobertura Vegetal — Zona {zona}</h2>
 
       {/* 1. Cobertura dominante */}
       <Field label="Cobertura dominante">

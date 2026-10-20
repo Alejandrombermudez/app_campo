@@ -27,17 +27,17 @@ export function EStep05({ data, onChange }: Props) {
 
   return (
     <div className="space-y-5">
-      <h2 className="text-base font-semibold text-[#0d7377]">§6A Cultivos</h2>
+      <h2 className="text-base font-semibold text-bosque">§6A Cultivos</h2>
       <p className="text-xs text-gray-500">Completa solo los cultivos que apliquen. Deja en blanco lo que no corresponda.</p>
 
       <div className="overflow-x-auto -mx-4 px-4">
         <table className="w-full text-xs border-collapse min-w-[600px]">
           <thead>
-            <tr className="bg-[#0d7377]/10">
+            <tr className="bg-bosque/10">
               {headers.map(h => (
-                <th key={h} className="px-2 py-2 text-left font-semibold text-[#0d7377] border border-[#0d7377]/20">{h}</th>
+                <th key={h} className="px-2 py-2 text-left font-semibold text-bosque border border-bosque/20">{h}</th>
               ))}
-              <th className="px-2 py-2 border border-[#0d7377]/20 w-8" />
+              <th className="px-2 py-2 border border-bosque/20 w-8" />
             </tr>
           </thead>
           <tbody>
@@ -74,7 +74,7 @@ export function EStep05({ data, onChange }: Props) {
       <button
         type="button"
         onClick={addRow}
-        className="flex items-center gap-2 text-sm text-[#0d7377] border border-dashed border-[#0d7377]/30 rounded-xl px-4 py-2"
+        className="flex items-center gap-2 text-sm text-bosque border border-dashed border-bosque/30 rounded-xl px-4 py-2"
       >
         <Plus size={14} /> Agregar otro cultivo
       </button>

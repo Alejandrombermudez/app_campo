@@ -9,12 +9,12 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   return <div className="space-y-1.5"><label className="block text-sm font-medium text-gray-700">{label}</label>{hint && <p className="text-xs text-gray-400">{hint}</p>}{children}</div>
 }
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return <div className="space-y-4"><h3 className="text-xs font-bold uppercase tracking-widest text-[#0d7377] border-b border-[#0d7377]/20 pb-1">{title}</h3>{children}</div>
+  return <div className="space-y-4"><h3 className="text-xs font-bold uppercase tracking-widest text-bosque border-b border-bosque/20 pb-1">{title}</h3>{children}</div>
 }
 function Bool({ label, val, onChange }: { label: string; val: boolean; onChange: (v: boolean) => void }) {
   return (
     <label className="flex items-center gap-2 cursor-pointer">
-      <input type="checkbox" checked={val} onChange={e => onChange(e.target.checked)} className="rounded accent-[#0d7377] w-4 h-4" />
+      <input type="checkbox" checked={val} onChange={e => onChange(e.target.checked)} className="rounded accent-bosque w-4 h-4" />
       <span className="text-sm text-gray-700">{label}</span>
     </label>
   )
@@ -32,7 +32,7 @@ export function EStep06({ data, onChange }: Props) {
   if (!data.tiene_ganaderia) {
     return (
       <div className="space-y-5">
-        <h2 className="text-base font-semibold text-[#0d7377]">§6B Ganadería</h2>
+        <h2 className="text-base font-semibold text-bosque">§6B Ganadería</h2>
         <Field label="¿Tiene ganado en el predio?">
           <YesNo val={data.tiene_ganaderia ?? null} onChange={v => s('tiene_ganaderia', v)} />
         </Field>
@@ -65,7 +65,7 @@ export function EStep06({ data, onChange }: Props) {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-base font-semibold text-[#0d7377]">§6B Ganadería</h2>
+      <h2 className="text-base font-semibold text-bosque">§6B Ganadería</h2>
 
       <Field label="¿Tiene ganado en el predio?">
         <YesNo val={data.tiene_ganaderia ?? null} onChange={v => s('tiene_ganaderia', v)} />

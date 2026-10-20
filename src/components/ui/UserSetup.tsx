@@ -49,7 +49,7 @@ export function UserSetup({ onComplete }: Props) {
           <div className="space-y-2">
             <button
               onClick={confirmar}
-              className="w-full bg-[#0d7377] text-white py-3 rounded-xl font-semibold"
+              className="w-full bg-bosque text-white py-3 rounded-xl font-semibold"
             >
               Sí, este es mi nombre — continuar
             </button>
@@ -69,8 +69,8 @@ export function UserSetup({ onComplete }: Props) {
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-5">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-14 h-14 rounded-full bg-[#0d7377]/10 flex items-center justify-center">
-            <User size={28} className="text-[#0d7377]" />
+          <div className="w-14 h-14 rounded-full bg-bosque/10 flex items-center justify-center">
+            <User size={28} className="text-bosque" />
           </div>
           <h2 className="text-lg font-bold text-gray-800 text-center">¿Cuál es tu nombre?</h2>
           <p className="text-sm text-gray-500 text-center">
@@ -92,7 +92,7 @@ export function UserSetup({ onComplete }: Props) {
         <button
           onClick={irAConfirmar}
           disabled={!normalizar(name)}
-          className="w-full bg-[#0d7377] text-white py-3 rounded-xl font-semibold disabled:opacity-40"
+          className="w-full bg-bosque text-white py-3 rounded-xl font-semibold disabled:opacity-40"
         >
           Continuar
         </button>

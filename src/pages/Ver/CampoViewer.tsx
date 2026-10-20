@@ -65,7 +65,7 @@ function FieldRow({ field, value }: { field: string; value: unknown }) {
       <span className="text-xs text-gray-500 flex-shrink-0 w-36">{label}</span>
       {url ? (
         <a href={url} target="_blank" rel="noopener noreferrer"
-          className="text-xs text-[#0d7377] underline flex items-center gap-1">
+          className="text-xs text-bosque underline flex items-center gap-1">
           Ver foto <ExternalLink size={10} />
         </a>
       ) : (
@@ -141,20 +141,20 @@ export function CampoViewer() {
     <div className="min-h-screen flex flex-col items-center justify-center gap-4 text-gray-500 px-8">
       <WifiOff size={40} className="text-gray-300"/>
       <p className="text-sm text-center">Sin internet. Conéctate para ver este registro.</p>
-      <button onClick={() => navigate(-1)} className="text-[#0d7377] font-semibold text-sm">Volver</button>
+      <button onClick={() => navigate(-1)} className="text-bosque font-semibold text-sm">Volver</button>
     </div>
   )
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0d7377]"/>
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-bosque"/>
     </div>
   )
 
   if (err || !record) return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-4 text-gray-500 px-8">
       <p className="text-sm text-center text-red-500">{err ?? 'Registro no encontrado.'}</p>
-      <button onClick={() => navigate(-1)} className="text-[#0d7377] font-semibold text-sm">Volver</button>
+      <button onClick={() => navigate(-1)} className="text-bosque font-semibold text-sm">Volver</button>
     </div>
   )
 
@@ -169,9 +169,9 @@ export function CampoViewer() {
   const s6 = (record.seccion_6_data ?? {}) as Record<string, unknown>
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f0fafa]">
+    <div className="min-h-screen flex flex-col bg-transparent">
 
-      <header className="bg-[#0d7377] text-white px-4 py-3 flex items-center gap-3">
+      <header className="bg-bosque text-white px-4 py-3 flex items-center gap-3">
         <button onClick={() => navigate(-1)} className="p-1 rounded"><ArrowLeft size={20}/></button>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm truncate">{predio?.nombre_predio || '(Predio sin identificar)'}</p>

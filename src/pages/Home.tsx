@@ -274,7 +274,7 @@ function RemoteEvalCard({
         className="w-full text-left px-4 pt-4 pb-3 active:bg-gray-50 disabled:opacity-60">
         <div className="flex items-center justify-between gap-2 mb-0.5">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#0d7377]/10 text-[#0d7377] flex-shrink-0">CAMPO</span>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-bosque/10 text-bosque flex-shrink-0">CAMPO</span>
             <p className="font-semibold text-gray-800 truncate">{predio?.nombre_predio ?? '(predio sin caché local)'}</p>
           </div>
           <Eye size={16} className="text-gray-300 flex-shrink-0"/>
@@ -583,10 +583,10 @@ export function Home() {
   if (!userName) return <UserSetup onComplete={name => setUserName(name)} />
 
   return (
-    <div className="min-h-screen bg-[#f0fafa] flex flex-col">
+    <div className="min-h-screen bg-transparent flex flex-col">
 
       {/* Header */}
-      <header className="bg-[#0d7377] text-white px-4 py-4">
+      <header className="bg-bosque text-white px-4 py-4">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold">Familias Resilientes</h1>
@@ -607,10 +607,10 @@ export function Home() {
             ['stats',   <BarChart2 size={13}/>, 'Estadísticas',   0],
           ] as const).map(([key, icon, label, count]) => (
             <button key={key} onClick={() => setTab(key)}
-              className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-1.5 rounded-lg transition-colors ${tab === key ? 'bg-white text-[#0d7377]' : 'text-white/80'}`}>
+              className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-1.5 rounded-lg transition-colors ${tab === key ? 'bg-white text-bosque' : 'text-white/80'}`}>
               {icon} {label}
               {count > 0 && (
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${tab === key ? 'bg-[#0d7377] text-white' : 'bg-white/20'}`}>{count}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${tab === key ? 'bg-bosque text-white' : 'bg-white/20'}`}>{count}</span>
               )}
             </button>
           ))}
@@ -695,7 +695,7 @@ export function Home() {
             </div>
           ) : loadingRemote ? (
             <div className="flex justify-center py-16">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0d7377]"/>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-bosque"/>
             </div>
           ) : mixedRemote.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3 text-gray-400">
@@ -725,7 +725,7 @@ export function Home() {
                     />
               )}
 
-              <button onClick={loadRemote} className="w-full flex items-center justify-center gap-2 text-sm text-[#0d7377] py-3">
+              <button onClick={loadRemote} className="w-full flex items-center justify-center gap-2 text-sm text-bosque py-3">
                 <RefreshCw size={14}/> Actualizar lista
               </button>
             </>

@@ -20,7 +20,7 @@ export function Step06({ data, onChange }: Props) {
 
   return (
     <div className="space-y-5">
-      <h2 className="text-base font-semibold text-[#0d7377]">§6 Riesgos y Restricciones</h2>
+      <h2 className="text-base font-semibold text-bosque">§6 Riesgos y Restricciones</h2>
 
       <Field label="¿Ha habido quemas recientes?">
         <YesNo val={data.quemas_recientes ?? null} onChange={v => set('quemas_recientes', v)} />

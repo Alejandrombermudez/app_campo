@@ -31,7 +31,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 
 function SectionHead({ title, color }: { title: string; color: 'campo' | 'predial' | 'general' }) {
   const cls = color === 'campo'
-    ? 'text-[#0d7377] border-[#0d7377]/30 bg-[#0d7377]/5'
+    ? 'text-bosque border-bosque/30 bg-bosque/5'
     : color === 'predial'
     ? 'text-emerald-700 border-emerald-300 bg-emerald-50'
     : 'text-gray-600 border-gray-200 bg-gray-50'
@@ -47,7 +47,7 @@ export function PStep01({ data, onChange }: Props) {
 
   return (
     <div className="space-y-5">
-      <h2 className="text-base font-semibold text-[#0d7377]">§1 Identificación del Predio</h2>
+      <h2 className="text-base font-semibold text-bosque">§1 Identificación del Predio</h2>
 
       {/* ── DATOS GENERALES (campos comunes) ─────────────────────────────── */}
       <SectionHead title="Datos generales" color="general" />

@@ -14,8 +14,8 @@ export default defineConfig({
         name: 'Evaluación de Áreas de Siembra — AE-CAMPO-001',
         short_name: 'AE-CAMPO',
         description: 'App offline para evaluación de áreas de restauración — Amazonía Emprende',
-        theme_color: '#0d7377',
-        background_color: '#f0fafa',
+        theme_color: '#2f3f32',
+        background_color: '#ebe5d9',
         display: 'standalone',
         start_url: '/',
         icons: [
@@ -24,7 +24,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,png,webp,jpeg,jpg,svg,ico}'],
+        globPatterns: ['**/*.{js,css,html,png,webp,jpeg,jpg,svg,ico,woff2}'],
         runtimeCaching: [
           {
             urlPattern: /\/ref-images\//,

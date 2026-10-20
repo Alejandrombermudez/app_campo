@@ -36,7 +36,7 @@ export function Step04({ zona, localEvaluacionId, data, onChange }: Props) {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-base font-semibold text-[#0d7377]">§4 Suelo y Topografía — Zona {zona}</h2>
+      <h2 className="text-base font-semibold text-bosque">§4 Suelo y Topografía — Zona {zona}</h2>
 
       {/* ── 1. Textura del suelo ──────────────────────────────────────────── */}
       <Field label="Textura del suelo (al tacto)" hint="Selecciona la opción y toca 'Ver referencia' para ver un ejemplo visual">
@@ -96,8 +96,8 @@ export function Step04({ zona, localEvaluacionId, data, onChange }: Props) {
 
       {/* Imagen de referencia pendiente (solo informativa — no requiere foto) */}
       {pendRef && (
-        <div className="bg-[#0d7377]/5 rounded-xl p-3 border border-[#0d7377]/10">
-          <p className="text-xs font-semibold text-[#0d7377] mb-2">Imagen de referencia — {data.pendiente}</p>
+        <div className="bg-bosque/5 rounded-xl p-3 border border-bosque/10">
+          <p className="text-xs font-semibold text-bosque mb-2">Imagen de referencia — {data.pendiente}</p>
           <img
             src={pendRef.image}
             alt={pendRef.label}
