@@ -16,11 +16,13 @@ const rev = (p: Partial<RevisionRecord>): RevisionRecord => ({
   geojson: poly(0.001), area_ha: 1, observaciones: '', zona_numero: 0, sync_status: 'pending', sync_error: null,
   created_by: 'x', fecha: '2026-10-20', created_at: `2026-10-20T10:00:0${t}Z`, updated_at: `2026-10-20T10:00:0${t}Z`, ...p,
 })
-const familia = (p: Partial<FamiliaRecord> = {}): FamiliaRecord => ({
+function familia(p: Partial<FamiliaRecord> = {}): FamiliaRecord {
+  return {
   local_id: 'f', sync_status: 'synced', sync_error: null, supabase_id: null, created_at: '', updated_at: '', created_by: '',
   predio_core_id: 'p', expediente_id: 'e', nombre_predio: 'x', nombre_propietario: 'x', municipio: 'x', vereda: 'x',
   departamento: 'x', contacto: '', zonas_sig: [], zonas_finca: [], num_zonas: 0, fecha: '2026-10-20', ...p,
-})
+  }
+}
 
 // 1. Campo primero: sin nada del SIG, se dibujan un límite y un sitio
 {
