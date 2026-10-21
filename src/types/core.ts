@@ -21,7 +21,21 @@ export interface ZonaFinca {
   geojson: string
 }
 
-// ─── En qué orden se trabaja el predio (core.expedientes.flujo_campo) ────────
+// ─── Capa de apoyo (geo.capas_apoyo) ─────────────────────────────────────────
+// Referencia para el mapa, NO un sitio de siembra: p. ej. las áreas elegibles de
+// Ley del Árbol y mercado de carbono (SHP de Lácteos del Hogar, 2026-10-20).
+// No se verifica, no se evalúa y no se sincroniza. Puede haber o no.
+export interface CapaApoyo {
+  id:      string
+  capa:    string          // lo que llegó junto: 'Elegibilidad LDH'
+  clase:   string | null   // 'Ley del Árbol', 'Mercado voluntario de carbono'…
+  nombre:  string | null   // rótulo corto: 'LA-1', 'MVC-2'
+  area_ha: number | null
+  geojson: string
+}
+
+// ─── En qué orden se trabaja el predio (core.v_predios_campo.flujo_campo) ────
+// No se guarda: la vista lo deduce de si el SIG propuso sitios que siguen en juego.
 // sig_primero: el SIG propone zonas y campo las verifica (el de siempre).
 // campo_primero: no hay propuesta; campo delimita el predio y las zonas desde
 // cero y el SIG confirma después desde la intranet.
@@ -50,4 +64,6 @@ export interface PredioHabilitado {
   cached_at:              string
   zonas:                  ZonaSig[]     // tipo='restauracion', sin descartadas
   zonas_finca:            ZonaFinca[]   // tipo='finca' (contexto del mapa)
+  /** Capas de referencia del predio. Ausente si la BD no tiene migration_campo_primero.sql. */
+  capas_apoyo?:           CapaApoyo[]
 }

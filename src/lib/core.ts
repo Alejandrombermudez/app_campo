@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 import { db } from '../db/schema'
-import type { PredioHabilitado, ZonaSig, ZonaFinca } from '../types/core'
+import type { PredioHabilitado, ZonaSig, ZonaFinca, CapaApoyo } from '../types/core'
 
 /** Vista core.v_predios_campo: predios que Jurídica+SIG ya habilitaron. */
 function prediosCampoTable() {
@@ -63,6 +63,41 @@ export async function fetchZonasPredio(predioId: string): Promise<{ siembra: Zon
   }
 }
 
+interface CapaRpcRow {
+  id: string
+  predio_id: string
+  capa: string
+  clase: string | null
+  nombre: string | null
+  area_ha: number | string | null
+  geojson: string
+}
+
+/**
+ * Capas de apoyo de todos los predios que ve la app (RPC geo.capas_apoyo_campo),
+ * agrupadas por predio. Si la BD todavía no tiene migration_campo_primero.sql la
+ * función no existe: eso no es un error, simplemente no hay capas. Cualquier otro
+ * fallo LANZA, como fetchZonasPredio.
+ */
+export async function fetchCapasApoyo(): Promise<Map<string, CapaApoyo[]>> {
+  const { data, error } = await supabase.schema('geo').rpc('capas_apoyo_campo')
+  const porPredio = new Map<string, CapaApoyo[]>()
+  if (error) {
+    if (error.code === 'PGRST202' || /capas_apoyo_campo/.test(error.message ?? '')) return porPredio
+    console.error('[core] fetchCapasApoyo error:', error.message)
+    throw new Error(`No se pudieron consultar las capas de apoyo: ${error.message}`)
+  }
+  for (const c of (data ?? []) as CapaRpcRow[]) {
+    const lista = porPredio.get(c.predio_id) ?? []
+    lista.push({
+      id: c.id, capa: c.capa, clase: c.clase, nombre: c.nombre,
+      area_ha: c.area_ha == null ? null : Number(c.area_ha), geojson: c.geojson,
+    })
+    porPredio.set(c.predio_id, lista)
+  }
+  return porPredio
+}
+
 /**
  * Lee la vista con `flujo_campo`. Si la BD todavía no tiene
  * migration_campo_primero.sql, la columna no existe (42703): se repite sin
@@ -82,10 +117,25 @@ async function leerPrediosCampo(predioId?: string) {
   return r
 }
 
-/** Descarga los predios habilitados + sus zonas SIG (con geometría) y los deja en caché (Dexie) para uso offline. */
-export async function refreshPrediosHabilitados(): Promise<PredioHabilitado[]> {
-  if (!navigator.onLine) return getPrediosHabilitadosCache()
+// Con decenas de predios (Elegibilidad LDH, 2026-10-20) bajar las zonas de uno
+// en uno tardaba y se repetía en cada cambio de pestaña de Home. Ahora: varias
+// a la vez, una sola descarga en curso compartida por quien la pida, y una
+// descarga reciente se reutiliza en vez de repetirse.
+const ZONAS_EN_PARALELO = 6
+const REUTILIZAR_MS = 60_000
+let descargaEnCurso: Promise<PredioHabilitado[]> | null = null
+let ultimaDescargaOk = 0
 
+/** Descarga los predios habilitados + sus zonas SIG (con geometría) y los deja en caché (Dexie) para uso offline. */
+export function refreshPrediosHabilitados(): Promise<PredioHabilitado[]> {
+  if (!navigator.onLine) return getPrediosHabilitadosCache()
+  if (descargaEnCurso) return descargaEnCurso
+  if (Date.now() - ultimaDescargaOk < REUTILIZAR_MS) return getPrediosHabilitadosCache()
+  descargaEnCurso = descargarPrediosHabilitados().finally(() => { descargaEnCurso = null })
+  return descargaEnCurso
+}
+
+async function descargarPrediosHabilitados(): Promise<PredioHabilitado[]> {
   const { data, error } = await leerPrediosCampo()
 
   if (error || !data) {
@@ -94,18 +144,31 @@ export async function refreshPrediosHabilitados(): Promise<PredioHabilitado[]> {
   }
 
   const cachedAt = new Date().toISOString()
-  const withZonas: PredioHabilitado[] = []
+  const filas = data as unknown as PredioCampoRow[]
+  const resultado: (PredioHabilitado | null)[] = new Array(filas.length).fill(null)
   try {
-    for (const p of data as unknown as PredioCampoRow[]) {
-      const { siembra, finca } = await fetchZonasPredio(p.predio_id)
-      // SIG I es obligatorio en el flujo de siempre: la vista ya lo exige
-      // (EXISTS geo.zonas), pero se repite aquí como cinturón de seguridad —
-      // nunca ofrecer un predio sin zonas reales, aunque la vista quede
-      // desactualizada o falle el filtro. La única excepción es un predio
-      // enviado como «campo primero»: ahí las zonas las dibuja el terreno.
-      if (siembra.length === 0 && p.flujo_campo !== 'campo_primero') continue
-      withZonas.push({ ...p, cached_at: cachedAt, zonas: siembra, zonas_finca: finca })
+    // Las capas de apoyo llegan todas en una sola llamada (son referencia, no
+    // sitios). Si la descarga falla, se aborta igual que con las zonas: la
+    // copia anterior queda intacta en vez de quedarse sin la guía.
+    const capas = await fetchCapasApoyo()
+    // Un error en cualquier predio rechaza todo (Promise.all): mismo efecto que
+    // antes con el bucle, la caché anterior queda intacta.
+    let siguiente = 0
+    const trabajador = async () => {
+      while (siguiente < filas.length) {
+        const i = siguiente++
+        const p = filas[i]
+        const { siembra, finca } = await fetchZonasPredio(p.predio_id)
+        // SIG I es obligatorio en el flujo de siempre: la vista ya lo exige
+        // (EXISTS geo.zonas), pero se repite aquí como cinturón de seguridad —
+        // nunca ofrecer un predio sin zonas reales, aunque la vista quede
+        // desactualizada o falle el filtro. La única excepción es un predio
+        // enviado como «campo primero»: ahí las zonas las dibuja el terreno.
+        if (siembra.length === 0 && p.flujo_campo !== 'campo_primero') continue
+        resultado[i] = { ...p, cached_at: cachedAt, zonas: siembra, zonas_finca: finca, capas_apoyo: capas.get(p.predio_id) ?? [] }
+      }
     }
+    await Promise.all(Array.from({ length: Math.min(ZONAS_EN_PARALELO, filas.length) }, trabajador))
   } catch (err) {
     // Si la señal se cae a mitad de la descarga, la lista quedaría incompleta.
     // Vale más conservar la caché anterior intacta que borrar predios que sí
@@ -114,8 +177,11 @@ export async function refreshPrediosHabilitados(): Promise<PredioHabilitado[]> {
     return getPrediosHabilitadosCache()
   }
 
+  // El orden de la vista (por nombre) se conserva aunque las zonas lleguen en desorden.
+  const withZonas = resultado.filter((p): p is PredioHabilitado => p !== null)
   await db.prediosHabilitados.clear()
   if (withZonas.length) await db.prediosHabilitados.bulkAdd(withZonas)
+  ultimaDescargaOk = Date.now()
   return withZonas
 }
 

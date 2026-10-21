@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ClipboardList, BarChart2, ChevronRight, CheckCircle, Clock, AlertCircle, Loader2, Pencil, Satellite } from 'lucide-react'
+import { ArrowLeft, ClipboardList, BarChart2, ChevronRight, CheckCircle, Clock, AlertCircle, Loader2, Pencil, Satellite, RotateCcw } from 'lucide-react'
 import { db } from '../../db/schema'
 import type { FamiliaRecord } from '../../types/familia'
 import type { EvaluacionRecord, ZonaData } from '../../types/evaluacion'
@@ -10,6 +10,7 @@ import type { RevisionRecord } from '../../types/revision'
 import { zonasActivas, zonasVigentes, limitesVigentes } from '../../lib/geo'
 import { buscarDiligenciamientoPropio } from '../../lib/core'
 import { ActualizarSigCard } from '../../components/ui/ActualizarSig'
+import { reiniciarPractica, tipoPractica } from '../../lib/practica'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const CULTIVOS_BASE = ['Café', 'Cacao', 'Caña de azúcar', 'Plátano', 'Yuca', 'Frutales', 'Madera']
@@ -98,6 +99,14 @@ export function FamiliaDetail() {
   const activas = familia ? zonasActivas(familia, revisiones) : []
   const nLimites = familia ? limitesVigentes(familia, revisiones).length : 0
   const campoPrimero = familia?.flujo_campo === 'campo_primero'
+
+  // Predio de práctica: borrar lo hecho y dejarlo como nuevo, para la siguiente persona.
+  async function empezarDeNuevo() {
+    if (!familia?.es_practica) return
+    if (!window.confirm('Se borra todo lo que se hizo en este predio de práctica (sitios, límite, evaluación y encuesta) y queda como nuevo. ¿Empezar de nuevo?')) return
+    const nuevo = await reiniciarPractica(familia)
+    navigate(`/familia/${nuevo}`, { replace: true })
+  }
 
   // ─── Abrir / crear evaluación de campo ──────────────────────────────────────
   // SIG I es obligatorio: las zonas NO se inventan, son las que el SIG ya
@@ -270,6 +279,21 @@ export function FamiliaDetail() {
       </header>
 
       <main className="flex-1 px-4 py-5 space-y-4">
+
+        {familia.es_practica && (
+          <div className="rounded-2xl border border-purple-200 bg-purple-50 px-4 py-3 text-[13px] text-purple-900">
+            <p>
+              <strong>Predio de práctica.</strong>{' '}
+              {tipoPractica(familia) === 'campo_primero'
+                ? 'Aquí se ensaya «campo primero»: dibujar el límite del predio y los sitios de siembra, con la capa de apoyo como guía.'
+                : 'Aquí se ensaya verificar la propuesta del SIG: confirmar, corregir o descartar cada sitio y revisar el límite.'}
+              {' '}Nada de lo que se haga aquí se sube: se queda en este celular.
+            </p>
+            <button onClick={empezarDeNuevo} className="boton boton-vidrio !min-h-10 !px-3.5 !text-sm mt-2.5">
+              <RotateCcw size={15} /> Empezar de nuevo
+            </button>
+          </div>
+        )}
 
         {/* Resumen de la familia */}
         <div className="tarjeta px-4 py-4 space-y-1">

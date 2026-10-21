@@ -11,14 +11,22 @@ que no se deben re-litigar sin el usuario.
 
 ## Qué hace
 
-Un predio solo aparece en esta app si **Jurídica aprobó Y SIG subió ≥1 zona de siembra Y alguien pulsó
-"Enviar a Campo" en la intranet** (regla de negocio explícita del usuario — SIG I es obligatorio, doble
-candado API + vista SQL). La app **nunca** crea predios ni zonas en blanco.
+**Regla vigente desde `migration_campo_primero.sql` (2026-10-20, decisión del usuario; rama
+`campo-primero-ldh`, migración sin correr):** todo predio que jurídica registra (expediente `activo`) se ve
+en esta app de una vez, sin «Enviar a Campo» y sin exigir cartografía. La vista deduce el flujo:
+- **`sig_primero`** — el SIG le propuso sitios que siguen en juego: campo los verifica y corrige.
+- **`campo_primero`** — no hay propuesta: en terreno se dibujan el **límite del predio** y los **sitios de
+  siembra** desde cero y el SIG confirma después. Los sitios que dibuja campo no le cambian el flujo.
 
-**Excepción explícita: «campo primero» (2026-10-20, rama `campo-primero-ldh`).** Si la intranet envía el
-predio con «Enviar campo primero» (`core.expedientes.flujo_campo = 'campo_primero'`), llega sin zonas y en
-terreno se dibujan el **límite del predio** y los **sitios de siembra** desde cero; el SIG confirma después.
-Sigue sin crear predios: el predio existe en jurídica, lo que se dibuja son geometrías por revisiones.
+La app **nunca** crea predios: el predio existe en jurídica, lo que se dibuja son geometrías por revisiones.
+Antes de la migración la vista vieja sigue mandando (solo predios en etapa campo con sitios del SIG) y la
+app lo tolera: sin la columna `flujo_campo` todo se trata como `sig_primero`.
+
+**Capas de apoyo** (`geo.capas_apoyo`, RPC `geo.capas_apoyo_campo()`, una sola llamada por descarga): guía
+de referencia en el mapa —p. ej. las áreas elegibles de Ley del Árbol y carbono del SHP de Lácteos del
+Hogar—. No son sitios: no se tocan, no se evalúan, no se sincronizan. Viven en la copia de
+`prediosHabilitados` (no en la familia) y el módulo SIG las pinta debajo de todo, con botón para ocultarlas.
+Si la BD no tiene la migración, simplemente no hay capas.
 
 Tres módulos por predio: **SIG** (verificar/corregir zonas de siembra en terreno, SIG II) · **Evaluación de Campo**
 (AE-CAMPO-001) · **Encuesta Predial** (socioeconómica).
@@ -88,8 +96,13 @@ escribe la geometría nueva. En la UI, una zona con corrección local pendiente 
 Mismo módulo SIG, no uno aparte (es el mismo mapa, el mismo GPS y la misma cola de revisiones; un segundo
 camino a `geo.zonas` es justo la clase de bug que ya costó correcciones). Lo que cambió:
 
-- `PredioHabilitado.flujo_campo` / `FamiliaRecord.flujo_campo`. `lib/core.ts` lo pide a la vista y, si la BD no
-  tiene `migration_campo_primero.sql` (42703), repite sin la columna: todo queda «SIG primero» como antes.
+- `PredioHabilitado.flujo_campo` / `FamiliaRecord.flujo_campo`: lo deduce la vista (no es columna de
+  `core.expedientes`). `lib/core.ts` lo pide y, si la BD no tiene `migration_campo_primero.sql` (42703), repite
+  sin la columna: todo queda «SIG primero» como antes. Al reabrir un predio desde la lista se toma el flujo nuevo.
+- Descarga de la lista (`refreshPrediosHabilitados`): con 120+ predios, las zonas se piden de a 6 en paralelo,
+  una descarga en curso se comparte y una reciente (< 60 s) se reutiliza; sigue sin vaciar la copia si la
+  señal se cae a mitad. La vista pone «Sin nombre» a los predios sin nombre: el índice de Dexie por
+  `nombre_predio` deja por fuera los registros con nombre nulo.
 - `RevisionRecord.tipo`: `'restauracion'` (sitio, y todas las revisiones viejas que no lo traen) o `'finca'`
   (límite del predio). `zonasVigentes` **ignora** las de límite —si no, su `zona_id` saldría como un sitio
   «retirado del SIG»— y `limitesVigentes` las resuelve aparte con las mismas reglas.
@@ -101,6 +114,25 @@ camino a `geo.zonas` es justo la clase de bug que ya costó correcciones). Lo qu
   límite: confirmar no borra un límite corregido.
 - «Actualizar desde el SIG» solo bloquea el «cero zonas» si el celular tenía zonas del SIG que perder.
 - Pruebas sin red: `npm run pruebas` (rolldown + stubs de Dexie y Supabase en `scripts/`).
+
+## Predios de práctica (capacitación) — `lib/practica.ts`
+
+Dos predios locales, uno por flujo, que `asegurarPracticas()` crea en el inicio si faltan: **Práctica 1 ·
+Verificar al SIG** (límite + 3 sitios) y **Práctica 2 · Campo primero** (sin límite ni sitios, con una capa de
+apoyo de ejemplo guardada en la propia familia: `FamiliaRecord.capas_apoyo`, que solo usa la práctica).
+`es_practica` hace que `lib/sync.ts` los marque «sincronizados» sin tocar la red. Las geometrías nacen en
+Florencia y se regeneran alrededor del GPS apenas hay predio **y** GPS (efecto en `Sig/index.tsx`, no en el
+callback del GPS: si el primer fix llegaba antes que el predio y el celular estaba quieto, la práctica se
+quedaba lejos). «Empezar de nuevo» (`reiniciarPractica`) borra sitios, límite, evaluación con fotos y encuesta.
+El primer encuadre del mapa va **sin animación**: Leaflet ignora cualquier cambio de vista mientras anima un zoom.
+
+## Manual de usuario — `manual/`
+
+`Manual_Usuario_App_Campo.pdf` se rehace cuando cambie la app: `node manual/servidor_manual.mjs` (entrada
+`app_campo-manual` de `.claude/launch.json`: un «Supabase» con predios y personas **inventados** y la app en
+:5190), `node manual/capturas.mjs` (puppeteer-core con el Chrome instalado; `npm install` dentro de `manual/`)
+y `python manual/build_manual.py` (reportlab, con Poppins y Fraunces convertidas a TTF en `manual/fuentes/`).
+Las fincas de ejemplo están en potreros de Morelia (`manual/centro.mjs`); el guion pone el GPS dentro de cada una.
 
 ## Estilo (2026-10-20)
 

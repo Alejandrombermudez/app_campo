@@ -6,17 +6,19 @@ import 'leaflet/dist/leaflet.css'
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css'
 import {
   ArrowLeft, Crosshair, Plus, Check, X, Pencil, Trash2, Undo2,
-  Satellite, AlertTriangle, RefreshCw, MapPin, Footprints, Fence, Sprout,
+  Satellite, AlertTriangle, RefreshCw, MapPin, Footprints, Fence, Sprout, Layers,
 } from 'lucide-react'
 import { db } from '../../db/schema'
 import type { FamiliaRecord } from '../../types/familia'
+import type { CapaApoyo } from '../../types/core'
+import { getPredioHabilitadoCache } from '../../lib/core'
 import type { RevisionRecord, CambiosRevision, TipoRevision } from '../../types/revision'
 import { newRevision, fusionarRevision } from '../../types/revision'
 import {
   zonasVigentes, limitesVigentes, parseGeom, areaHa, posicionRespectoZonas,
   centroZonas, distanciaTexto, type ZonaVigente, type LimiteVigente,
 } from '../../lib/geo'
-import { generarZonasPractica } from '../../lib/practica'
+import { geometriasPractica, tipoPractica } from '../../lib/practica'
 import { useOnlineStatus } from '../../lib/useOnlineStatus'
 
 // ─── Estilos por estado de la zona ────────────────────────────────────────────
@@ -31,6 +33,18 @@ const ESTILO_FANTASMA: L.PathOptions = {
 }
 // Mientras se trabaja el límite, los sitios se ven pero no estorban
 const ESTILO_SITIO_TENUE: L.PathOptions = { color: '#f59e0b', weight: 1.5, fillOpacity: 0.08, dashArray: '2 4', interactive: false }
+
+// Capas de apoyo (áreas elegibles…): guía tenue debajo de todo, sin clic. Colores
+// que no se confunden con los de los sitios (ámbar, verde, azul, turquesa, rojo).
+function colorApoyo(clase: string | null): string {
+  if (/ley del [aá]rbol/i.test(clase ?? '')) return '#fde047'   // amarillo
+  if (/carbono/i.test(clase ?? ''))          return '#c4b5fd'   // lila
+  return '#e5e7eb'
+}
+const estiloApoyo = (c: CapaApoyo): L.PathOptions => {
+  const color = colorApoyo(c.clase)
+  return { color, weight: 1.5, dashArray: '1 5', lineCap: 'round', fillColor: color, fillOpacity: 0.1, interactive: false }
+}
 
 function colorRevision(rev: RevisionRecord | null, descartada = false, retirada = false): string {
   if (retirada)                           return '#9ca3af'   // ya no existe en el SIG
@@ -92,11 +106,14 @@ export function SigPage() {
   const [gpsError, setGpsError] = useState<string | null>(null)
   const [siguiendo, setSiguiendo] = useState(true)
   const [puntosGps, setPuntosGps] = useState<[number, number][]>([])   // [lon, lat]
+  const [capasApoyo, setCapasApoyo] = useState<CapaApoyo[]>([])
+  const [verApoyo, setVerApoyo] = useState(true)
 
   const mapRef = useRef<L.Map | null>(null)
   const mapDivRef = useRef<HTMLDivElement | null>(null)
   const zonasLayerRef = useRef<L.LayerGroup | null>(null)
   const fincaLayerRef = useRef<L.LayerGroup | null>(null)
+  const apoyoLayerRef = useRef<L.LayerGroup | null>(null)
   const trazoLayerRef = useRef<L.LayerGroup | null>(null)
   const capasPorZonaRef = useRef<Map<number, L.Polygon>>(new Map())
   const capasPorLimiteRef = useRef<Map<number, L.Polygon>>(new Map())
@@ -108,14 +125,12 @@ export function SigPage() {
   const siguiendoRef = useRef(true)
   const modoRef = useRef<Modo>('ver')
   const capaRef = useRef<Capa>('sitios')
-  const familiaRef = useRef<FamiliaRecord | null>(null)
-  const anclandoRef = useRef(false)   // evita doble anclaje si llegan 2 fixes de GPS casi juntos
+  const anclandoRef = useRef(false)   // la práctica se ancla al GPS una sola vez
   const capaInicialRef = useRef(false)
 
   siguiendoRef.current = siguiendo
   modoRef.current = modo
   capaRef.current = capa
-  familiaRef.current = familia
 
   // ─── Cargar datos locales ────────────────────────────────────────────────────
   const cargar = useCallback(async () => {
@@ -124,8 +139,12 @@ export function SigPage() {
       db.familias.where('local_id').equals(id).first(),
       db.revisiones.where('familia_local_id').equals(id).toArray(),
     ])
+    // Las capas de apoyo viven en la copia de predios habilitados (se renuevan
+    // con cada descarga y quedan para usar sin señal), no en la familia.
+    const ph = f?.predio_core_id ? await getPredioHabilitadoCache(f.predio_core_id) : undefined
     setFamilia(f ?? null)
     setRevisiones(revs)
+    setCapasApoyo(ph?.capas_apoyo ?? f?.capas_apoyo ?? [])   // la práctica trae las suyas
     setLoaded(true)
   }, [id])
 
@@ -173,7 +192,15 @@ export function SigPage() {
     }).addTo(map)
 
     L.control.zoom({ position: 'bottomright' }).addTo(map)
+    // Ayudas del dibujo («toca para marcar el primer vértice»…) en español.
+    map.pm.setLang('es')
 
+    // El panel de abajo cambia de alto (lista, detalle, solo la ayuda al dibujar):
+    // sin esto Leaflet no se entera y queda una franja gris sin mapa.
+    const alCambiarTamano = new ResizeObserver(() => map.invalidateSize())
+    alCambiarTamano.observe(mapDivRef.current)
+
+    apoyoLayerRef.current = L.layerGroup().addTo(map)   // debajo de todo
     fincaLayerRef.current = L.layerGroup().addTo(map)
     zonasLayerRef.current = L.layerGroup().addTo(map)
     trazoLayerRef.current = L.layerGroup().addTo(map)
@@ -192,6 +219,7 @@ export function SigPage() {
 
     mapRef.current = map
     return () => {
+      alCambiarTamano.disconnect()
       map.remove()
       mapRef.current = null
       // Las capas del GPS eran de este mapa: sin esto el punto azul no vuelve
@@ -205,6 +233,18 @@ export function SigPage() {
     // creaba otra vez tras cada acción — volvía al zoom 15 y perdía el GPS.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [familia?.local_id])
+
+  // ─── Capas de apoyo (va antes que el resto para entrar en el primer encuadre) ─
+  useEffect(() => {
+    const grupo = apoyoLayerRef.current
+    if (!grupo) return
+    grupo.clearLayers()
+    if (!verApoyo) return
+    for (const c of capasApoyo) {
+      const f = parseGeom(c.geojson)
+      if (f) L.geoJSON(f, { style: estiloApoyo(c), interactive: false }).addTo(grupo)
+    }
+  }, [capasApoyo, verApoyo, familia?.local_id])
 
   // ─── Pintar capas cada vez que cambian las zonas o el límite ───────────────
   useEffect(() => {
@@ -247,10 +287,13 @@ export function SigPage() {
     // Ajustar la vista la primera vez que hay algo que mostrar
     if (!fittedRef.current) {
       try {
-        const capas = [...(zonasLayerRef.current?.getLayers() ?? []), ...(fincaLayerRef.current?.getLayers() ?? [])]
+        const capas = [...(zonasLayerRef.current?.getLayers() ?? []), ...(fincaLayerRef.current?.getLayers() ?? []),
+                       ...(apoyoLayerRef.current?.getLayers() ?? [])]
         if (capas.length) {
           const bounds = L.featureGroup(capas).getBounds()
-          if (bounds.isValid()) { map.fitBounds(bounds.pad(0.2)); fittedRef.current = true }
+          // Sin animación: Leaflet ignora cualquier cambio de vista mientras anima
+          // un zoom, y el reencuadre de la práctica llega a los milisegundos.
+          if (bounds.isValid()) { map.fitBounds(bounds.pad(0.2), { animate: false }); fittedRef.current = true }
         }
       } catch { /* sin geometrías válidas */ }
     }
@@ -271,6 +314,25 @@ export function SigPage() {
     }).addTo(capaTrazo))
   }, [puntosGps, modo, capa])
 
+  // ─── Predio de práctica: anclarlo donde está la persona ─────────────────────
+  // Las geometrías de ejercicio nacen en una ubicación de respaldo (Florencia) y
+  // se regeneran alrededor del GPS apenas hay predio Y GPS, llegue primero lo que
+  // llegue: antes se hacía solo al recibir un fix, y si el primero llegaba antes
+  // de cargar el predio y el celular estaba quieto, la práctica se quedaba lejos.
+  // Una sola vez por predio.
+  useEffect(() => {
+    if (!gps || !familia?.es_practica || familia.practica_anclada || anclandoRef.current) return
+    anclandoRef.current = true
+    db.familias.update(familia.id!, {
+      ...geometriasPractica(tipoPractica(familia), gps.lat, gps.lon),
+      practica_anclada: true,
+      updated_at:       new Date().toISOString(),
+    }).then(() => {
+      fittedRef.current = false   // el siguiente pintado encuadra la geometría nueva
+      return cargar()
+    })
+  }, [gps, familia, cargar])
+
   // ─── GPS ─────────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!('geolocation' in navigator)) { setGpsError('Este dispositivo no tiene GPS disponible'); return }
@@ -279,25 +341,6 @@ export function SigPage() {
         setGpsError(null)
         const p = { lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy }
         setGps(p)
-
-        // Predio de práctica: en el primer fix real de GPS, las zonas de
-        // ejercicio (hasta ahora en la ubicación de respaldo) se regeneran
-        // alrededor de este punto. Se ancla una sola vez por predio.
-        const fam = familiaRef.current
-        if (fam?.es_practica && !fam.practica_anclada && !anclandoRef.current) {
-          anclandoRef.current = true
-          const { finca, siembra } = generarZonasPractica(p.lat, p.lon)
-          db.familias.update(fam.id!, {
-            zonas_finca: finca,
-            zonas_sig:   siembra,
-            num_zonas:   siembra.length,
-            practica_anclada: true,
-            updated_at:  new Date().toISOString(),
-          }).then(() => {
-            fittedRef.current = false
-            return cargar()
-          })
-        }
 
         const map = mapRef.current
         if (!map) return
@@ -318,7 +361,6 @@ export function SigPage() {
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
     )
     return () => navigator.geolocation.clearWatch(watchId)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function centrarEnMi() {
@@ -585,6 +627,14 @@ export function SigPage() {
                 aria-label="Trazar caminando con el GPS" title="Trazar caminando con el GPS">
                 <Footprints size={22} />
               </button>
+              {capasApoyo.length > 0 && (
+                <button onClick={() => setVerApoyo(v => !v)} aria-pressed={verApoyo}
+                  className={`boton-mapa ${verApoyo ? 'boton-pizarra' : 'vidrio text-bosque'}`}
+                  aria-label={verApoyo ? 'Ocultar la capa de apoyo' : 'Mostrar la capa de apoyo'}
+                  title={verApoyo ? 'Ocultar la capa de apoyo' : 'Mostrar la capa de apoyo'}>
+                  <Layers size={22} />
+                </button>
+              )}
             </>
           )}
         </div>
@@ -682,6 +732,8 @@ export function SigPage() {
               El SIG los confirma después desde la intranet.
             </p>
           )}
+
+          {capasApoyo.length > 0 && verApoyo && !sel && <LeyendaApoyo capas={capasApoyo} />}
 
           {!sel ? (
             capa === 'sitios' ? (
@@ -815,6 +867,29 @@ export function SigPage() {
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+/** Qué es cada color de la capa de apoyo. Es guía: no se toca ni se evalúa. */
+function LeyendaApoyo({ capas }: { capas: CapaApoyo[] }) {
+  const porClase = new Map<string, number>()
+  for (const c of capas) porClase.set(c.clase ?? 'Otra', (porClase.get(c.clase ?? 'Otra') ?? 0) + (c.area_ha ?? 0))
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white/60 px-3.5 py-2.5 mb-3 text-[12.5px] text-gray-700">
+      <p className="flex items-center gap-1.5 font-semibold text-gray-800 mb-1">
+        <Layers size={14} className="text-gray-500" /> Capa de apoyo · {capas[0].capa}
+      </p>
+      <ul className="flex flex-wrap gap-x-3 gap-y-1">
+        {[...porClase.entries()].map(([clase, ha]) => (
+          <li key={clase} className="flex items-center gap-1.5">
+            <span className="inline-block w-3.5 h-3.5 rounded-[4px] border-2 border-dotted"
+              style={{ borderColor: colorApoyo(clase), background: `${colorApoyo(clase)}55` }} />
+            {clase} <span className="text-gray-500">{ha.toFixed(1)} ha</span>
+          </li>
+        ))}
+      </ul>
+      <p className="text-[11.5px] text-gray-500 mt-1">Es una guía: no son sitios de siembra. Dibuja los sitios encima, donde de verdad se va a sembrar.</p>
     </div>
   )
 }

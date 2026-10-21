@@ -82,7 +82,12 @@ export interface PredioSubmissionStatus {
   predial?: string   // nombre de quien ya diligenció la Encuesta Predial
 }
 
-// ─── Modo "nueva": selector de predios habilitados por Jurídica + SIG ────────
+// Desde migration_campo_primero.sql la app ve los predios en cualquier etapa.
+const ETAPA: Record<string, string> = {
+  juridica: 'En jurídica', sig_i: 'SIG I', campo: 'En campo', sig_ii: 'SIG II',
+}
+
+// ─── Modo "nueva": selector de predios (todos los que jurídica tiene activos) ─
 export function SelectorPredios({
   statusByPredio, embedded = false,
 }: {
@@ -117,11 +122,11 @@ export function SelectorPredios({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return predios
+    // La vista puede traer vereda, municipio o propietario vacíos (NULL): sin el
+    // `?? ''` escribir en el buscador tumbaba la lista.
     return predios.filter(p =>
-      p.nombre_predio.toLowerCase().includes(q) ||
-      p.nombre_propietario.toLowerCase().includes(q) ||
-      p.municipio.toLowerCase().includes(q) ||
-      p.vereda.toLowerCase().includes(q)
+      [p.nombre_predio, p.nombre_propietario, p.municipio, p.vereda]
+        .some(c => (c ?? '').toLowerCase().includes(q))
     )
   }, [predios, query])
 
@@ -157,7 +162,7 @@ export function SelectorPredios({
           <button onClick={() => navigate('/')} className="boton-mapa vidrio-oscuro !w-11 !h-11" aria-label="Volver"><ArrowLeft size={20} /></button>
           <div className="flex-1 min-w-0">
             <h1 className="text-xl leading-tight">Predios para campo</h1>
-            <p className="text-xs opacity-80">Enviados desde la intranet: con propuesta del SIG o para delimitar en terreno</p>
+            <p className="text-xs opacity-80">Todos los de jurídica: con propuesta del SIG o para delimitar en terreno</p>
           </div>
         </header>
       )}
@@ -191,7 +196,7 @@ export function SelectorPredios({
             <MapPin size={40} className="text-gray-300" />
             <p className="text-sm text-center px-8">
               {online
-                ? 'No hay predios habilitados para Campo todavía. Jurídica + SIG deben avanzar un expediente primero.'
+                ? 'No hay predios para campo todavía: aparecen aquí apenas jurídica los registra.'
                 : 'Sin internet y sin predios en caché. Conéctate una vez para descargarlos.'}
             </p>
           </div>
@@ -209,7 +214,7 @@ export function SelectorPredios({
                   <p className="font-semibold text-[15px] text-gray-900 truncate">{p.nombre_predio}</p>
                   <p className="text-sm text-gray-600 truncate">{p.nombre_propietario}</p>
                   <p className="text-xs text-gray-500 truncate">
-                    {p.municipio}{p.vereda && ` · ${p.vereda}`} · {p.etapa === 'campo' ? 'Habilitado' : 'SIG II'}
+                    {p.municipio}{p.vereda && ` · ${p.vereda}`} · {ETAPA[p.etapa] ?? p.etapa}
                   </p>
                   <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                     {p.flujo_campo === 'campo_primero' ? (
@@ -219,6 +224,11 @@ export function SelectorPredios({
                     ) : (
                       <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
                         {p.zonas.length} sitio(s) propuestos por el SIG
+                      </span>
+                    )}
+                    {(p.capas_apoyo?.length ?? 0) > 0 && (
+                      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-800">
+                        Con capa de apoyo
                       </span>
                     )}
                   </div>

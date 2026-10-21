@@ -1,3 +1,4 @@
+import { hoyLocal } from '../lib/fecha'
 // ─── Revisión de zona (SIG II) ────────────────────────────────────────────────
 // Cada acción del técnico sobre una zona en el módulo SIG se guarda como una
 // revisión local (offline, Dexie) y al sincronizar se aplica en el servidor
@@ -102,7 +103,7 @@ export function newRevision(base: {
     sync_status: 'pending',
     sync_error:  null,
     created_by:  localStorage.getItem('ae_campo_user') ?? '',
-    fecha:       new Date().toISOString().slice(0, 10),
+    fecha:       hoyLocal(),
     created_at:  new Date().toISOString(),
     updated_at:  new Date().toISOString(),
     observaciones: base.observaciones ?? '',

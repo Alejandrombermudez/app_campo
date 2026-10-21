@@ -1,4 +1,5 @@
-import type { PredioHabilitado, ZonaSig, ZonaFinca, FlujoCampo } from './core'
+import type { PredioHabilitado, ZonaSig, ZonaFinca, FlujoCampo, CapaApoyo } from './core'
+import { hoyLocal } from '../lib/fecha'
 
 // ─── Entidad padre: Familia / Predio ─────────────────────────────────────────
 // Ya NO se crea en blanco: nace de un PredioHabilitado (core.v_predios_campo),
@@ -49,6 +50,11 @@ export interface FamiliaRecord {
   // un predio real, nunca se sincroniza a Supabase (ver guards en lib/sync.ts).
   es_practica?:       boolean
   practica_anclada?:  boolean   // true una vez que las zonas ya se generaron alrededor del GPS real
+  /** Qué ejercita: verificar la propuesta del SIG o «campo primero». Ausente = 'sig_primero' (el de antes). */
+  practica_tipo?:     FlujoCampo
+  /** Capa de apoyo de ejemplo. Solo la usa el predio de práctica: los reales leen sus
+   *  capas de la copia de predios habilitados, no de la familia. */
+  capas_apoyo?:       CapaApoyo[]
 }
 
 /** Crea la familia de trabajo local a partir de un predio ya habilitado (Jurídica+SIG). */
@@ -86,7 +92,7 @@ export function newFamiliaDesdeHabilitado(p: PredioHabilitado): FamiliaRecord {
     zonas_finca:        p.zonas_finca ?? [],
     num_zonas:          p.zonas.length,
 
-    fecha:              new Date().toISOString().slice(0, 10),
+    fecha:              hoyLocal(),
     flujo_campo:        p.flujo_campo ?? 'sig_primero',
   }
 }

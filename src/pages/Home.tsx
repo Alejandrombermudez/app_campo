@@ -21,7 +21,7 @@ import { useOnlineStatus } from '../lib/useOnlineStatus'
 import { evalTable, encTable } from '../lib/supabase'
 import { refreshPrediosHabilitados, getPrediosHabilitadosCache } from '../lib/core'
 import { sigCambioRespectoA } from '../lib/actualizarSig'
-import { crearFamiliaPractica } from '../lib/practica'
+import { asegurarPracticas } from '../lib/practica'
 import { InstallBanner } from '../components/ui/InstallBanner'
 import { UserSetup } from '../components/ui/UserSetup'
 import { StatsTab } from './Stats'
@@ -383,18 +383,12 @@ export function Home() {
     setPendingRevs(rv)
   }, [])
 
-  // Predio de práctica (capacitación): asegura que cualquiera que abra la app
-  // por primera vez en este dispositivo tenga uno listo, sin depender de
-  // Supabase ni de un predio real habilitado por Jurídica+SIG.
-  // Transacción 'rw': React StrictMode (dev) invoca este efecto dos veces al
-  // montar: sin la transacción, ambas pasadas podrían leer "no existe" antes
-  // de que la otra insertara, duplicando el predio de práctica.
+  // Predios de práctica (capacitación): asegura que cualquiera que abra la app
+  // en este dispositivo tenga uno de cada flujo listo —verificar al SIG y
+  // «campo primero»—, sin depender de Supabase ni de un predio real.
   useEffect(() => {
     (async () => {
-      await db.transaction('rw', db.familias, async () => {
-        const existente = await db.familias.filter(f => f.es_practica === true).first()
-        if (!existente) await db.familias.add(crearFamiliaPractica())
-      })
+      await asegurarPracticas()
       await loadLocal()
     })()
   }, [loadLocal])
