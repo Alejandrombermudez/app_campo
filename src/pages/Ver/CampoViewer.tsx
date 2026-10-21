@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, ChevronDown, ChevronUp, ExternalLink, WifiOff } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { nombreProyecto, type Proyecto } from '../../lib/proyectos'
 import { useOnlineStatus } from '../../lib/useOnlineStatus'
 import { getPredioIdentidad, type PredioIdentidad } from '../../lib/core'
 
@@ -162,6 +163,9 @@ export function CampoViewer() {
   const s2    = (record.seccion_2_data ?? {}) as Record<string, unknown>
   const zonas = (record.zonas_data ?? []) as Array<{
     zona_numero: number
+    numero_mapa?: number
+    proyecto?: string | null
+    descartada?: boolean
     cobertura: Record<string, unknown>
     suelo: Record<string, unknown>
     logistica: Record<string, unknown>
@@ -192,7 +196,9 @@ export function CampoViewer() {
         {zonas.map(zona => (
           <div key={zona.zona_numero} className="space-y-2">
             <p className="text-xs font-bold uppercase tracking-widest text-gray-400 px-1">
-              Zona {zona.zona_numero}
+              Sitio {zona.numero_mapa ?? zona.zona_numero}
+              {zona.proyecto ? ` · ${nombreProyecto(zona.proyecto as Proyecto)}` : ''}
+              {zona.descartada ? ' · rechazado' : ''}
             </p>
             {Object.keys(zona.cobertura ?? {}).length > 0 &&
               <Section title="Cobertura vegetal" data={zona.cobertura} defaultOpen={false} />}

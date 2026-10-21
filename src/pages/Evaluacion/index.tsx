@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Save, CheckCircle } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Save, CheckCircle, Satellite } from 'lucide-react'
 import { db } from '../../db/schema'
 import type {
   EvaluacionRecord, ZonaData,
@@ -8,7 +8,8 @@ import type {
   SeccionCobertura, SeccionSuelo, SeccionLogistica,
   SeccionRiesgos, SeccionFirmas,
 } from '../../types/evaluacion'
-import { reconciliarZonas } from '../../types/evaluacion'
+import { reconciliarZonas, estadoCaracterizacion } from '../../types/evaluacion'
+import { nombreProyecto } from '../../lib/proyectos'
 import { zonasVigentes } from '../../lib/geo'
 import { ProgressBar } from '../../components/ui/ProgressBar'
 import { Step01 } from './Step01_Identificacion'
@@ -26,11 +27,23 @@ interface StepDescriptor {
   zona?: number
 }
 
-function buildSteps(zonas: ZonaData[]): StepDescriptor[] {
+/**
+ * Pasos del formulario. Desde el 2026-10-21, en un predio la caracterización de
+ * cada sitio (§3, §4, §5) se llena desde el editor SIG, con el sitio a la vista:
+ * aquí queda un paso «Sitios» que dice cómo va cada uno y lleva al mapa. La
+ * entrada vieja sin predio (/evaluacion/nueva) conserva los pasos por zona.
+ */
+function buildSteps(zonas: ZonaData[], conPredio: boolean): StepDescriptor[] {
   const steps: StepDescriptor[] = [
     { id: 'identificacion', label: '§1 Identificación' },
     { id: 'cartografia',    label: '§2 Cartografía Social' },
   ]
+  if (conPredio) {
+    steps.push({ id: 'sitios',  label: 'Sitios de siembra' })
+    steps.push({ id: 'riesgos', label: '§6 Riesgos' })
+    steps.push({ id: 'firmas',  label: 'Firmas' })
+    return steps
+  }
   zonas.forEach((zd, i) => {
     const z = i + 1
     const sufijo = zd.descartada ? ' (descartada en SIG)' : ''
@@ -109,14 +122,14 @@ export function EvaluacionPage() {
         setEv(vigente)
         // Clamp: si el número de zonas bajó al reconciliar (zona descartada
         // sin datos), el paso guardado puede haber quedado fuera de rango.
-        const totalVigente = buildSteps(vigente.zonas).length
+        const totalVigente = buildSteps(vigente.zonas, !!vigente.familia_local_id).length
         setStepIdx(Math.min(vigente.step_completed ?? 0, totalVigente - 1))
       }
       setLoaded(true)
     })
   }, [id])
 
-  const steps = buildSteps(ev.zonas)
+  const steps = buildSteps(ev.zonas, !!ev.familia_local_id)
   const total = steps.length
   const step  = steps[stepIdx]
 
@@ -132,6 +145,8 @@ export function EvaluacionPage() {
     setSaving(true)
     const updated: EvaluacionRecord = {
       ...ev,
+      // Quien evalúa es quien entra al celular: no se teclea.
+      seccion_1: { ...ev.seccion_1, evaluador_1: ev.seccion_1.evaluador_1 || ev.created_by },
       step_completed: Math.max(ev.step_completed, stepIdx),
       updated_at: new Date().toISOString(),
     }
@@ -232,13 +247,19 @@ export function EvaluacionPage() {
       {/* Contenido del paso */}
       <main className="flex-1 overflow-y-auto px-4 py-5">
         {step.id === 'identificacion' && (
-          <Step01 data={ev.seccion_1} onChange={handleS1Change} />
+          <Step01 data={ev.seccion_1} onChange={handleS1Change} evaluador={ev.created_by} />
         )}
         {step.id === 'cartografia' && (
           <Step02
             data={ev.seccion_2}
             onChange={s2 => setEv(p => ({ ...p, seccion_2: { ...p.seccion_2, ...(s2 as Partial<SeccionCartografia>) } }))}
           />
+        )}
+        {step.id === 'sitios' && (
+          <PasoSitios ev={ev} onIrAlMapa={async () => {
+            if (ev.id) await db.evaluaciones.put({ ...ev, updated_at: new Date().toISOString() })
+            navigate(`/sig/${ev.familia_local_id}`)
+          }} />
         )}
         {step.id.startsWith('cobertura_z') && (
           <Step03
@@ -273,8 +294,8 @@ export function EvaluacionPage() {
           <Step07
             data={ev.seccion_7}
             onChange={s7 => setEv(p => ({ ...p, seccion_7: { ...p.seccion_7, ...(s7 as Partial<SeccionFirmas>) } }))}
-            evaluador1={ev.seccion_1.evaluador_1 ?? ''}
-            evaluador2={ev.seccion_1.evaluador_2 ?? ''}
+            evaluador1={ev.seccion_1.evaluador_1 || ev.created_by}
+            {...(ev.familia_local_id ? {} : { evaluador2: ev.seccion_1.evaluador_2 ?? '' })}
           />
         )}
       </main>
@@ -304,6 +325,48 @@ export function EvaluacionPage() {
           )}
         </button>
       </footer>
+    </div>
+  )
+}
+
+/**
+ * Cómo va la caracterización de cada sitio. No se llena aquí: se llena en el
+ * editor SIG, sitio por sitio, con el polígono a la vista.
+ */
+function PasoSitios({ ev, onIrAlMapa }: { ev: EvaluacionRecord; onIrAlMapa: () => void }) {
+  const activos = ev.zonas.filter(z => !z.descartada)
+  const hechos = activos.filter(z => estadoCaracterizacion(z) === 'completa').length
+  return (
+    <div className="space-y-4">
+      <h2 className="text-base font-semibold text-bosque">Sitios de siembra</h2>
+      <p className="text-sm text-gray-600">
+        La caracterización biofísica de cada sitio (cobertura, suelo y acceso) se llena en el <strong>Módulo SIG</strong>:
+        se confirma, corrige o dibuja el sitio, se le pone el tipo de proyecto y desde ahí se abre su formulario.
+      </p>
+      {activos.length === 0 ? (
+        <p className="text-sm text-amber-900 bg-amber-100 border border-amber-200 rounded-2xl px-3.5 py-2.5">
+          Todavía no hay sitios de siembra. Confírmalos o dibújalos en el Módulo SIG.
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {activos.map(z => {
+            const e = estadoCaracterizacion(z)
+            return (
+              <li key={z.zona_id ?? z.revision_local_id ?? z.zona_numero} className="tarjeta flex items-center gap-2 px-3.5 py-2.5 flex-wrap">
+                <span className="text-[15px] font-semibold text-gray-900">Sitio {z.numero_mapa ?? z.zona_numero}</span>
+                {z.area_ha_sig != null && <span className="text-sm text-gray-600">{z.area_ha_sig.toFixed(1)} ha</span>}
+                {z.proyecto && <span className="text-[12px] text-gray-700">{nombreProyecto(z.proyecto)}</span>}
+                <span className={`ml-auto text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                  e === 'completa' ? 'bg-emerald-100 text-emerald-800' : e === 'en_curso' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>
+                  {e === 'completa' ? 'Caracterizado' : e === 'en_curso' ? 'A medias' : 'Sin caracterizar'}
+                </span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      <p className="text-xs text-gray-500">{hechos} de {activos.length} sitio(s) caracterizado(s). Puedes seguir con el formulario y volver luego.</p>
+      <button onClick={onIrAlMapa} className="boton boton-ambar w-full"><Satellite size={16} /> Ir al Módulo SIG</button>
     </div>
   )
 }

@@ -75,6 +75,7 @@ export function generarCapasPractica(lat: number, lon: number): CapaApoyo[] {
     { clase: 'Ley del Árbol',                 nombre: 'LA-1',  rumbo: 20,  dist: 70, radio: 50 },
     { clase: 'Ley del Árbol',                 nombre: 'LA-2',  rumbo: 210, dist: 80, radio: 45 },
     { clase: 'Mercado voluntario de carbono', nombre: 'MVC-1', rumbo: 115, dist: 85, radio: 40 },
+    { clase: 'No elegible: Cobertura o zonificación', nombre: 'US-1', rumbo: 300, dist: 95, radio: 42 },
   ]
   return areas.map((a, i) => {
     const [cLon, cLat] = puntoDesdeCentro(lat, lon, a.dist, a.rumbo)
@@ -163,13 +164,14 @@ export async function asegurarPracticas(): Promise<void> {
 export async function reiniciarPractica(familia: FamiliaRecord): Promise<string> {
   if (!familia.es_practica) throw new Error('Solo se reinicia un predio de práctica.')
   const nuevo = crearFamiliaPractica(tipoPractica(familia))
-  await db.transaction('rw', [db.familias, db.revisiones, db.evaluaciones, db.encuestas, db.photos], async () => {
+  await db.transaction('rw', [db.familias, db.revisiones, db.decisionesApoyo, db.evaluaciones, db.encuestas, db.photos], async () => {
     for (const ev of await db.evaluaciones.where('familia_local_id').equals(familia.local_id).toArray()) {
       await db.photos.where('local_evaluacion_id').equals(ev.local_id).delete()
       await db.evaluaciones.delete(ev.id!)
     }
     await db.encuestas.where('familia_local_id').equals(familia.local_id).delete()
     await db.revisiones.where('familia_local_id').equals(familia.local_id).delete()
+    await db.decisionesApoyo.where('familia_local_id').equals(familia.local_id).delete()
     await db.familias.delete(familia.id!)
     await db.familias.add(nuevo)
   })

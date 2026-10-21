@@ -5,6 +5,8 @@ import type { SeccionSuelo } from '../../types/evaluacion'
 interface Props {
   zona: number
   localEvaluacionId: string
+  /** Prefijo de las fotos (prefijoFotos de types/evaluacion). Sin él: `zona_<número>`, como antes. */
+  fotoPrefijo?: string
   data: Partial<SeccionSuelo>
   onChange: (d: Partial<SeccionSuelo>) => void
 }
@@ -28,7 +30,8 @@ const REF: Record<string, { image: string; label: string }> = {
   Montaña:   { image: '/ref-images/montana.webp',        label: 'Referencia: montaña'          },
 }
 
-export function Step04({ zona, localEvaluacionId, data, onChange }: Props) {
+export function Step04({ zona, localEvaluacionId, fotoPrefijo, data, onChange }: Props) {
+  const pf = fotoPrefijo ?? `zona_${zona}`
   const set = (k: keyof SeccionSuelo, v: unknown) => onChange({ ...data, [k]: v })
 
   const texRef  = data.textura_suelo ? REF[data.textura_suelo]  : undefined
@@ -36,7 +39,7 @@ export function Step04({ zona, localEvaluacionId, data, onChange }: Props) {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-base font-semibold text-bosque">§4 Suelo y Topografía — Zona {zona}</h2>
+      <h2 className="text-base font-semibold text-bosque">§4 Suelo y Topografía — Sitio {zona}</h2>
 
       {/* ── 1. Textura del suelo ──────────────────────────────────────────── */}
       <Field label="Textura del suelo (al tacto)" hint="Selecciona la opción y toca 'Ver referencia' para ver un ejemplo visual">
@@ -52,7 +55,7 @@ export function Step04({ zona, localEvaluacionId, data, onChange }: Props) {
       <div className="bg-gray-50 rounded-xl p-3 space-y-2 border border-gray-100">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Foto — Textura del suelo</p>
         <PhotoCapture
-          fieldKey={`zona_${zona}_textura`}
+          fieldKey={`${pf}_textura`}
           localEvaluacionId={localEvaluacionId}
           currentPhotoId={data.foto_textura_id ?? null}
           onCapture={id => set('foto_textura_id', id)}
@@ -76,7 +79,7 @@ export function Step04({ zona, localEvaluacionId, data, onChange }: Props) {
       <div className="bg-gray-50 rounded-xl p-3 space-y-2 border border-gray-100">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Foto — Drenaje superficial</p>
         <PhotoCapture
-          fieldKey={`zona_${zona}_drenaje`}
+          fieldKey={`${pf}_drenaje`}
           localEvaluacionId={localEvaluacionId}
           currentPhotoId={data.foto_drenaje_id ?? null}
           onCapture={id => set('foto_drenaje_id', id)}
@@ -129,7 +132,7 @@ export function Step04({ zona, localEvaluacionId, data, onChange }: Props) {
       <div className="bg-gray-50 rounded-xl p-3 space-y-2 border border-gray-100">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Foto — Erosión / Roca superficial</p>
         <PhotoCapture
-          fieldKey={`zona_${zona}_erosion`}
+          fieldKey={`${pf}_erosion`}
           localEvaluacionId={localEvaluacionId}
           currentPhotoId={data.foto_erosion_id ?? null}
           onCapture={id => set('foto_erosion_id', id)}

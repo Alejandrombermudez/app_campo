@@ -41,8 +41,9 @@ export function EStep01({ data, onChange }: Props) {
             <input type="date" value={data.fecha_encuesta ?? ''} onChange={e => s('fecha_encuesta', e.target.value)} />
           </Field>
         </div>
+        {/* Quien encuesta es quien entra al celular (2026-10-21): no se teclea. */}
         <Field label="Encuestador">
-          <input type="text" value={data.encuestador ?? ''} onChange={e => s('encuestador', e.target.value)} />
+          <input type="text" value={data.encuestador || (localStorage.getItem('ae_campo_user') ?? '')} readOnly className="bg-gray-50 text-gray-600" />
         </Field>
         <Field label="Tipo de encuestado">
           <RadioGrp opts={['Propietario','Arrendatario','Mayordomo','Trabajador']} val={data.tipo_encuestado ?? ''} onChange={v => s('tipo_encuestado', v)} cols={2} />

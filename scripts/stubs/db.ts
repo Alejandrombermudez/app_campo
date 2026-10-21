@@ -10,6 +10,10 @@ class Tabla {
     if (f) Object.assign(f, cambios)
     return Promise.resolve(f ? 1 : 0)
   }
+  filter(pred: (f: Fila) => boolean) {
+    return { toArray: () => Promise.resolve(this.filas.filter(pred).map(f => ({ ...f }))) }
+  }
+  delete(id: number) { this.filas = this.filas.filter(f => f.id !== id); return Promise.resolve() }
   where(campo: string) {
     const sobre = (pred: (f: Fila) => boolean) => ({
       first: () => Promise.resolve(this.filas.find(pred)),
@@ -24,4 +28,5 @@ class Tabla {
 export const db = {
   familias: new Tabla(), evaluaciones: new Tabla(), revisiones: new Tabla(),
   encuestas: new Tabla(), photos: new Tabla(), predios: new Tabla(), prediosHabilitados: new Tabla(),
+  decisionesApoyo: new Tabla(),
 }

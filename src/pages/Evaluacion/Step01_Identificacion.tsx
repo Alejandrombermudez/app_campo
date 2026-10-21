@@ -4,6 +4,8 @@ import type { SeccionIdentificacion } from '../../types/evaluacion'
 interface Props {
   data: Partial<SeccionIdentificacion>
   onChange: (d: Partial<SeccionIdentificacion>) => void
+  /** Quien evalúa: el nombre con que entra el celular. */
+  evaluador: string
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -17,8 +19,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 // Predio/propietario/municipio/vereda y las zonas (num_zonas/área) NO se
 // preguntan aquí: ya vienen de Jurídica+SIG (ver ficha de la familia) y de
-// geo.zonas respectivamente. Esta sección solo guarda metadatos de la visita.
-export function Step01({ data, onChange }: Props) {
+// geo.zonas respectivamente. Desde el 2026-10-21 tampoco evaluador 1 y 2 ni el
+// código del predio (pedido del usuario): quien evalúa es quien entra al
+// celular y el código viene de jurídica. Solo se muestran.
+export function Step01({ data, onChange, evaluador }: Props) {
   const set = (k: keyof SeccionIdentificacion, v: unknown) => onChange({ ...data, [k]: v })
 
   return (
@@ -38,17 +42,14 @@ export function Step01({ data, onChange }: Props) {
         <input type="date" value={data.fecha_visita ?? ''} onChange={e => set('fecha_visita', e.target.value)} />
       </Field>
 
-      <Field label="Evaluador 1">
-        <input type="text" placeholder="Nombre completo" value={data.evaluador_1 ?? ''} onChange={e => set('evaluador_1', e.target.value)} />
-      </Field>
-
-      <Field label="Evaluador 2 (opcional)">
-        <input type="text" placeholder="Nombre completo" value={data.evaluador_2 ?? ''} onChange={e => set('evaluador_2', e.target.value)} />
-      </Field>
-
-      <Field label="Código de predio">
-        <input type="text" placeholder="Ej: CAQ-001" value={data.codigo_predio ?? ''} onChange={e => set('codigo_predio', e.target.value)} />
-      </Field>
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Quien evalúa">
+          <input type="text" value={data.evaluador_1 || evaluador} readOnly className="bg-gray-50 text-gray-600" />
+        </Field>
+        <Field label="Código del predio (jurídica)">
+          <input type="text" value={data.codigo_predio || 'Sin código en jurídica'} readOnly className="bg-gray-50 text-gray-600" />
+        </Field>
+      </div>
 
       <Field label="¿Hay señal celular en el predio?">
         <YesNo val={data.senal_celular ?? null} onChange={v => set('senal_celular', v)} />

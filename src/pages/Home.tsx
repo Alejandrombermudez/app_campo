@@ -13,6 +13,8 @@ import type { PredioRecord } from '../types/predio'
 import type { PredioHabilitado } from '../types/core'
 import {
   syncPendingRevisiones,
+  syncPendingDecisionesApoyo,
+  syncAnotacionesPendientes,
   syncPendingEvaluaciones,
   syncPendingEncuestas,
   syncPendingPredios,
@@ -445,14 +447,16 @@ export function Home() {
     try {
       // Revisiones de zonas primero: corrigen geo.zonas en el servidor
       const rz = await syncPendingRevisiones()
-      const [re, rn, rp] = await Promise.all([
+      const [re, rn, rp, rd] = await Promise.all([
         syncPendingEvaluaciones(),
         syncPendingEncuestas(),
         syncPendingPredios(),
+        syncPendingDecisionesApoyo(),
+        syncAnotacionesPendientes(),   // tipo de proyecto de revisiones ya subidas: no cuenta en el aviso
       ])
       await loadLocal()
-      const synced = rz.synced + re.synced + rn.synced + rp.synced
-      const errors = rz.errors + re.errors + rn.errors + rp.errors
+      const synced = rz.synced + re.synced + rn.synced + rp.synced + rd.synced
+      const errors = rz.errors + re.errors + rn.errors + rp.errors + rd.errors
       if (errors > 0) {
         setToast({ msg: `${synced} sincronizados, ${errors} con error — ver detalle abajo`, isError: true })
       } else {

@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "pruebas": "rolldown -c scripts/rolldown.pruebas.mjs && node node_modules/.pruebas/prueba-campo-primero.js && node node_modules/.pruebas/prueba-sync-limite.js"
+    "pruebas": "rolldown -c scripts/rolldown.pruebas.mjs && node node_modules/.pruebas/prueba-campo-primero.js && node node_modules/.pruebas/prueba-sync-limite.js && node node_modules/.pruebas/prueba-sitios-proyecto.js"
   },
   "dependencies": {
     "@geoman-io/leaflet-geoman-free": "^2.20.0",

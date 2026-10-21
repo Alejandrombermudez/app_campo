@@ -11,6 +11,8 @@ import { PredialViewer } from './pages/Ver/PredialViewer'
 import { useOnlineStatus } from './lib/useOnlineStatus'
 import {
   syncPendingRevisiones,
+  syncPendingDecisionesApoyo,
+  syncAnotacionesPendientes,
   syncPendingEvaluaciones,
   syncPendingEncuestas,
   syncPendingPredios,
@@ -18,6 +20,7 @@ import {
 
 // Leaflet + geoman pesan; solo se cargan al entrar al módulo SIG
 const SigPage = lazy(() => import('./pages/Sig').then(m => ({ default: m.SigPage })))
+const CaracterizacionPage = lazy(() => import('./pages/Sig/Caracterizacion').then(m => ({ default: m.CaracterizacionPage })))
 
 function SyncTrigger() {
   const online  = useOnlineStatus()
@@ -28,6 +31,8 @@ function SyncTrigger() {
       const timer = setTimeout(async () => {
         // Revisiones primero: corrigen geo.zonas, de las que depende lo demás
         await syncPendingRevisiones()
+        syncAnotacionesPendientes()
+        syncPendingDecisionesApoyo()
         syncPendingEvaluaciones()
         syncPendingEncuestas()
         syncPendingPredios()
@@ -58,6 +63,16 @@ export default function App() {
             </div>
           }>
             <SigPage />
+          </Suspense>
+        } />
+        {/* Caracterización biofísica de un sitio, desde el editor SIG */}
+        <Route path="/sig/:id/sitio/:clave" element={
+          <Suspense fallback={
+            <div className="min-h-screen flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-bosque" />
+            </div>
+          }>
+            <CaracterizacionPage />
           </Suspense>
         } />
         {/* Formulario unificado legacy */}

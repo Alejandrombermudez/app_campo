@@ -1,7 +1,11 @@
 # Contexto — App de Campo (app_campo)
 
 > **Documento de traspaso entre sesiones.** Qué es esta app, qué se hizo, qué falta y cómo retomar.
-> Última actualización: **2026-10-21** — **campo primero** en producción: corrió `migration_campo_primero.sql`
+> Última actualización: **2026-10-21 (tarde)** — cada sitio lleva **tipo de proyecto** (Ley del Árbol,
+> Conexión, Pastoreo), rechazar pide motivo, la **caracterización biofísica se llena por sitio desde el editor
+> SIG** y las áreas de la capa de apoyo se usan o se rechazan (ver `CLAUDE.md` § «Sitios con tipo de proyecto…»).
+> Migración `migration_sitios_proyecto.sql` pendiente de correr.
+> Antes ese día: **campo primero** en producción: corrió `migration_campo_primero.sql`
 > y la rama `campo-primero-ldh` se unió a `main`. Todo predio con expediente activo se ve en la app (ya no
 > exige SIG I ni «Enviar a Campo», ver `CLAUDE.md` §«Qué hace»), con capa de apoyo donde la hay. Lo que dicen
 > §1 y §6 sobre «SIG I obligatorio» es la regla de antes.

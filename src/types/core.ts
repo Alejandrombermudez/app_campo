@@ -29,9 +29,13 @@ export interface CapaApoyo {
   id:      string
   capa:    string          // lo que llegó junto: 'Elegibilidad LDH'
   clase:   string | null   // 'Ley del Árbol', 'Mercado voluntario de carbono'…
-  nombre:  string | null   // rótulo corto: 'LA-1', 'MVC-2'
+  nombre:  string | null   // rótulo corto: 'LA-1', 'MVC-2', 'US-1'
   area_ha: number | null
   geojson: string
+  // Lo que ya hizo campo con esta área en cualquier celular
+  // (geo.decisiones_capa_apoyo_campo, migration_sitios_proyecto.sql).
+  estado_campo?: 'usada' | 'descartada' | null
+  observacion_campo?: string | null
 }
 
 // ─── En qué orden se trabaja el predio (core.v_predios_campo.flujo_campo) ────

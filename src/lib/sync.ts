@@ -1,8 +1,8 @@
 import { db } from '../db/schema'
 import { supabase, evalTable } from './supabase'
 import type { PhotoRecord, ZonaData, EvaluacionRecord } from '../types/evaluacion'
-import { vincularZonaNueva } from '../types/evaluacion'
-import { tipoRevision } from '../types/revision'
+import { prefijoFotos, vincularZonaNueva } from '../types/evaluacion'
+import { tipoRevision, type RevisionRecord } from '../types/revision'
 import type { CultivoRow, EncuestaPredialRecord } from '../types/encuesta'
 
 function encTable()     { return supabase.schema('siembra').from('familias') }
@@ -274,11 +274,16 @@ export async function syncPendingRevisiones(): Promise<{ synced: number; errors:
         await vincularEvaluacionZonaNueva(rev.familia_local_id, rev.local_id, idAplicado)
       }
 
+      // Tipo de proyecto y área de origen: viajan aparte (geo.anotar_revision_campo).
+      // Si fallan, la revisión igual queda subida y esto se reintenta solo.
+      const anotacion = rev.proyecto || rev.capa_apoyo_id ? await anotarRevision(rev) : null
+
       await db.revisiones.update(rev.id!, {
-        sync_status: 'synced',
-        sync_error:  null,
-        zona_id:     idAplicado,
-        updated_at:  new Date().toISOString(),
+        sync_status:    'synced',
+        sync_error:     null,
+        zona_id:        idAplicado,
+        anotacion_sync: anotacion,
+        updated_at:     new Date().toISOString(),
       })
       familiasTocadas.add(rev.familia_local_id)
       synced++
@@ -312,6 +317,86 @@ export async function syncPendingRevisiones(): Promise<{ synced: number; errors:
     }
   }
 
+  return { synced, errors }
+}
+
+/**
+ * Anota en el servidor el tipo de proyecto y el área de la capa de apoyo de una
+ * revisión ya subida (RPC geo.anotar_revision_campo, migration_sitios_proyecto.sql).
+ * Nunca lanza: devuelve 'synced' o 'pendiente' (sin la migración, sin señal, o si
+ * el servidor todavía no ve la revisión). El dato no se pierde: también va en la
+ * evaluación (zonas_data) y se reintenta en cada sincronización.
+ */
+async function anotarRevision(rev: RevisionRecord): Promise<'synced' | 'pendiente'> {
+  try {
+    const { data, error } = await supabase.schema('geo').rpc('anotar_revision_campo', {
+      p_local_id:      rev.local_id,
+      p_proyecto:      rev.proyecto ?? null,
+      p_capa_apoyo_id: esUuid(rev.capa_apoyo_id) ? rev.capa_apoyo_id : null,
+    })
+    if (error) {
+      console.warn('[sync anotacion] queda pendiente:', error.message)
+      return 'pendiente'
+    }
+    return data === false ? 'pendiente' : 'synced'
+  } catch {
+    return 'pendiente'
+  }
+}
+
+const esUuid = (v: string | null | undefined): v is string =>
+  !!v && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
+
+/** Reintenta las anotaciones (proyecto / área de origen) que quedaron pendientes. */
+export async function syncAnotacionesPendientes(): Promise<{ synced: number; errors: number }> {
+  if (!navigator.onLine) return { synced: 0, errors: 0 }
+  const pendientes = await db.revisiones.filter(r => r.sync_status === 'synced' && r.anotacion_sync === 'pendiente').toArray()
+  let synced = 0, errors = 0
+  for (const rev of pendientes) {
+    const r = await anotarRevision(rev)
+    if (r === 'synced') { await db.revisiones.update(rev.id!, { anotacion_sync: 'synced' }); synced++ }
+    else errors++
+  }
+  return { synced, errors }
+}
+
+// ─── Áreas de la capa de apoyo rechazadas en campo → RPC geo.revisar_capa_apoyo ─
+// Idempotente por local_id. Si la BD no tiene migration_sitios_proyecto.sql, el
+// rechazo queda en el celular con el aviso y se reintenta (no se pierde).
+export async function syncPendingDecisionesApoyo(): Promise<{ synced: number; errors: number }> {
+  if (!navigator.onLine) return { synced: 0, errors: 0 }
+  const pendientes = await db.decisionesApoyo.where('sync_status').anyOf(['pending', 'error']).toArray()
+  let synced = 0, errors = 0
+  for (const d of pendientes) {
+    try {
+      if (await esFamiliaDePractica(d.familia_local_id) || !esUuid(d.capa_apoyo_id)) {
+        await db.decisionesApoyo.update(d.id!, { sync_status: 'synced', sync_error: null, updated_at: new Date().toISOString() })
+        synced++
+        continue
+      }
+      const { error } = await supabase.schema('geo').rpc('revisar_capa_apoyo', {
+        p_local_id:      d.local_id,
+        p_capa_apoyo_id: d.capa_apoyo_id,
+        p_accion:        d.accion,
+        p_observaciones: d.observaciones,
+        p_evaluador:     d.created_by || null,
+        p_fecha:         d.fecha || null,
+      })
+      if (error) {
+        if (error.code === 'PGRST202' || /revisar_capa_apoyo/i.test(error.message ?? '')) {
+          throw new Error('El servidor todavía no recibe rechazos de la capa de apoyo (falta migration_sitios_proyecto.sql). Sigue guardado en este celular y se sube solo cuando esté lista.')
+        }
+        throw new Error([error.message, error.details, error.hint, error.code].filter(Boolean).join(' | '))
+      }
+      await db.decisionesApoyo.update(d.id!, { sync_status: 'synced', sync_error: null, updated_at: new Date().toISOString() })
+      synced++
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[sync capa de apoyo] error:', msg)
+      await db.decisionesApoyo.update(d.id!, { sync_status: 'error', sync_error: msg })
+      errors++
+    }
+  }
   return { synced, errors }
 }
 
@@ -364,15 +449,16 @@ export async function syncPendingEvaluaciones(): Promise<{ synced: number; error
 
       // 4. Sustituir IDs de fotos por URLs en las zonas
       let zonas_data = ev.zonas.map(zona => {
-        const zn = zona.zona_numero
+        // Fotos de un sitio caracterizado desde el editor SIG: `sitio_<uuid>_…`; las de antes, `zona_<n>_…`.
+        const pf = prefijoFotos(zona)
         const s  = { ...zona.suelo }  as Record<string, unknown>
         const l  = { ...zona.logistica } as Record<string, unknown>
 
-        if (s['foto_textura_id'])   { s['foto_textura_url']   = photoUrlMap[`zona_${zn}_textura`]   ?? null; delete s['foto_textura_id']   }
-        if (s['foto_drenaje_id'])   { s['foto_drenaje_url']   = photoUrlMap[`zona_${zn}_drenaje`]   ?? null; delete s['foto_drenaje_id']   }
-        if (s['foto_pendiente_id']) { s['foto_pendiente_url'] = photoUrlMap[`zona_${zn}_pendiente`] ?? null; delete s['foto_pendiente_id'] }
-        if (s['foto_erosion_id'])   { s['foto_erosion_url']   = photoUrlMap[`zona_${zn}_erosion`]   ?? null; delete s['foto_erosion_id']   }
-        if (l['foto_via_id'])       { l['foto_via_url']       = photoUrlMap[`zona_${zn}_via`]       ?? null; delete l['foto_via_id']       }
+        if (s['foto_textura_id'])   { s['foto_textura_url']   = photoUrlMap[`${pf}_textura`]   ?? null; delete s['foto_textura_id']   }
+        if (s['foto_drenaje_id'])   { s['foto_drenaje_url']   = photoUrlMap[`${pf}_drenaje`]   ?? null; delete s['foto_drenaje_id']   }
+        if (s['foto_pendiente_id']) { s['foto_pendiente_url'] = photoUrlMap[`${pf}_pendiente`] ?? null; delete s['foto_pendiente_id'] }
+        if (s['foto_erosion_id'])   { s['foto_erosion_url']   = photoUrlMap[`${pf}_erosion`]   ?? null; delete s['foto_erosion_id']   }
+        if (l['foto_via_id'])       { l['foto_via_url']       = photoUrlMap[`${pf}_via`]       ?? null; delete l['foto_via_id']       }
 
         return { ...zona, suelo: s, logistica: l }
       })

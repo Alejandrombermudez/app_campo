@@ -6,20 +6,23 @@ import 'leaflet/dist/leaflet.css'
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css'
 import {
   ArrowLeft, Crosshair, Plus, Check, X, Pencil, Trash2, Undo2,
-  Satellite, AlertTriangle, RefreshCw, MapPin, Footprints, Fence, Sprout, Layers,
+  Satellite, AlertTriangle, RefreshCw, MapPin, Footprints, Fence, Sprout, Layers, ClipboardList,
 } from 'lucide-react'
 import { db } from '../../db/schema'
 import type { FamiliaRecord } from '../../types/familia'
 import type { CapaApoyo } from '../../types/core'
 import { getPredioHabilitadoCache } from '../../lib/core'
-import type { RevisionRecord, CambiosRevision, TipoRevision } from '../../types/revision'
-import { newRevision, fusionarRevision } from '../../types/revision'
+import type { RevisionRecord, CambiosRevision, TipoRevision, DecisionApoyoRecord } from '../../types/revision'
+import { newRevision, fusionarRevision, newDecisionApoyo } from '../../types/revision'
+import type { EvaluacionRecord, EstadoCaracterizacion } from '../../types/evaluacion'
+import { claveSitio, estadoCaracterizacion } from '../../types/evaluacion'
 import {
   zonasVigentes, limitesVigentes, parseGeom, areaHa, posicionRespectoZonas,
   centroZonas, distanciaTexto, type ZonaVigente, type LimiteVigente,
 } from '../../lib/geo'
 import { geometriasPractica, tipoPractica } from '../../lib/practica'
 import { useOnlineStatus } from '../../lib/useOnlineStatus'
+import { PROYECTOS, nombreProyecto, proyectoSugeridoDeClase, etiquetaClase, type Proyecto } from '../../lib/proyectos'
 
 // ─── Estilos por estado de la zona ────────────────────────────────────────────
 // Colores del satelital: los mismos que pinta la intranet (lib/colores-campo.ts
@@ -34,16 +37,32 @@ const ESTILO_FANTASMA: L.PathOptions = {
 // Mientras se trabaja el límite, los sitios se ven pero no estorban
 const ESTILO_SITIO_TENUE: L.PathOptions = { color: '#f59e0b', weight: 1.5, fillOpacity: 0.08, dashArray: '2 4', interactive: false }
 
-// Capas de apoyo (áreas elegibles…): guía tenue debajo de todo, sin clic. Colores
-// que no se confunden con los de los sitios (ámbar, verde, azul, turquesa, rojo).
+// Capas de apoyo (áreas elegibles…): debajo de todo. Desde el 2026-10-21 se
+// tocan: un área se usa como sitio (tal cual o ajustada) o se rechaza con motivo.
+// Colores que no se confunden con los de los sitios (ámbar, verde, azul,
+// turquesa, rojo).
 function colorApoyo(clase: string | null): string {
-  if (/ley del [aá]rbol/i.test(clase ?? '')) return '#fde047'   // amarillo
-  if (/carbono/i.test(clase ?? ''))          return '#c4b5fd'   // lila
+  const p = proyectoSugeridoDeClase(clase)
+  if (p === 'ley_arbol') return '#fde047'   // amarillo
+  if (p === 'conexion')  return '#c4b5fd'   // lila
+  if (p === 'pastoreo')  return '#fdba74'   // durazno
   return '#e5e7eb'
 }
-const estiloApoyo = (c: CapaApoyo): L.PathOptions => {
+/** Qué pasó con un área de apoyo: nada todavía, se usó como sitio, o se rechazó. */
+type EstadoApoyo = 'libre' | 'usada' | 'descartada'
+const estiloApoyo = (c: CapaApoyo, estado: EstadoApoyo, seleccionada: boolean): L.PathOptions => {
+  if (estado === 'descartada') return { color: '#9ca3af', weight: seleccionada ? 3 : 1.5, dashArray: '2 6', fillColor: '#9ca3af', fillOpacity: 0.05 }
   const color = colorApoyo(c.clase)
-  return { color, weight: 1.5, dashArray: '1 5', lineCap: 'round', fillColor: color, fillOpacity: 0.1, interactive: false }
+  return {
+    color, weight: seleccionada ? 4 : 1.5, dashArray: seleccionada ? undefined : '1 5', lineCap: 'round',
+    fillColor: color, fillOpacity: estado === 'usada' ? 0.03 : seleccionada ? 0.3 : 0.12,
+  }
+}
+
+const ETIQUETA_CARACTERIZACION: Record<EstadoCaracterizacion, { txt: string; cls: string }> = {
+  pendiente: { txt: 'Sin caracterizar',      cls: 'bg-amber-100 text-amber-800' },
+  en_curso:  { txt: 'Caracterización a medias', cls: 'bg-blue-100 text-blue-800' },
+  completa:  { txt: 'Caracterizado',         cls: 'bg-emerald-100 text-emerald-800' },
 }
 
 function colorRevision(rev: RevisionRecord | null, descartada = false, retirada = false): string {
@@ -74,7 +93,7 @@ function estiloLimite(l: LimiteVigente, seleccionado: boolean): L.PathOptions {
 
 function etiquetaRevision(z: { revision: RevisionRecord | null; descartada?: boolean; retirada_del_sig?: boolean }): { txt: string; cls: string } {
   if (z.retirada_del_sig)                  return { txt: 'Retirada por el SIG', cls: 'bg-gray-200 text-gray-700' }
-  if (z.descartada)                        return { txt: 'Descartada',        cls: 'bg-red-100 text-red-800' }
+  if (z.descartada)                        return { txt: 'Rechazada',         cls: 'bg-red-100 text-red-800' }
   if (z.revision?.accion === 'confirmada') return { txt: 'Confirmada',        cls: 'bg-emerald-100 text-emerald-800' }
   if (z.revision?.accion === 'modificada') return { txt: 'Corregida',         cls: 'bg-blue-100 text-blue-800' }
   if (z.revision?.accion === 'nueva')      return { txt: 'Dibujada en campo', cls: 'bg-teal-100 text-teal-800' }
@@ -108,6 +127,12 @@ export function SigPage() {
   const [puntosGps, setPuntosGps] = useState<[number, number][]>([])   // [lon, lat]
   const [capasApoyo, setCapasApoyo] = useState<CapaApoyo[]>([])
   const [verApoyo, setVerApoyo] = useState(true)
+  const [decisiones, setDecisiones] = useState<DecisionApoyoRecord[]>([])   // áreas de apoyo rechazadas aquí
+  const [evaluacion, setEvaluacion] = useState<EvaluacionRecord | null>(null)
+  const [selApoyo, setSelApoyo] = useState<string | null>(null)              // área de apoyo seleccionada
+  const [proyectoSel, setProyectoSel] = useState<Proyecto | null>(null)      // tipo de proyecto en el panel
+  const [rechazando, setRechazando] = useState(false)                        // pidiendo el motivo del rechazo
+  const [motivo, setMotivo] = useState('')
 
   const mapRef = useRef<L.Map | null>(null)
   const mapDivRef = useRef<HTMLDivElement | null>(null)
@@ -126,6 +151,8 @@ export function SigPage() {
   const modoRef = useRef<Modo>('ver')
   const capaRef = useRef<Capa>('sitios')
   const anclandoRef = useRef(false)   // la práctica se ancla al GPS una sola vez
+  // Qué se está editando: un sitio/límite existente, o un área de apoyo que se va a usar como sitio
+  const editandoApoyoRef = useRef<CapaApoyo | null>(null)
   const capaInicialRef = useRef(false)
 
   siguiendoRef.current = siguiendo
@@ -135,17 +162,22 @@ export function SigPage() {
   // ─── Cargar datos locales ────────────────────────────────────────────────────
   const cargar = useCallback(async () => {
     if (!id) return
-    const [f, revs] = await Promise.all([
+    const [f, revs, decs, ev] = await Promise.all([
       db.familias.where('local_id').equals(id).first(),
       db.revisiones.where('familia_local_id').equals(id).toArray(),
+      db.decisionesApoyo.where('familia_local_id').equals(id).toArray(),
+      db.evaluaciones.where('familia_local_id').equals(id).first(),
     ])
     // Las capas de apoyo viven en la copia de predios habilitados (se renuevan
     // con cada descarga y quedan para usar sin señal), no en la familia.
     const ph = f?.predio_core_id ? await getPredioHabilitadoCache(f.predio_core_id) : undefined
     setFamilia(f ?? null)
     setRevisiones(revs)
+    setDecisiones(decs)
+    setEvaluacion(ev ?? null)
     setCapasApoyo(ph?.capas_apoyo ?? f?.capas_apoyo ?? [])   // la práctica trae las suyas
     setLoaded(true)
+    return { familia: f, revisiones: revs }
   }, [id])
 
   useEffect(() => { cargar() }, [cargar])
@@ -162,6 +194,50 @@ export function SigPage() {
   const zonaSel = capa === 'sitios' ? zonas.find(z => z.zona_numero === selNum) ?? null : null
   const limSel = capa === 'limite' ? limites.find(l => l.numero === selLim) ?? null : null
   const pendientes = revisiones.filter(r => r.sync_status !== 'synced').length
+    + decisiones.filter(d => d.sync_status !== 'synced').length
+
+  // Qué pasó con cada área de apoyo: usada si un sitio salió de ella (aquí o en
+  // otro celular), rechazada si se rechazó; si no, libre.
+  const estadoApoyo = useMemo(() => {
+    const m = new Map<string, EstadoApoyo>()
+    for (const c of capasApoyo) {
+      const usada = c.estado_campo === 'usada' || revisiones.some(r => r.capa_apoyo_id === c.id && r.accion !== 'descartada')
+      const rechazada = c.estado_campo === 'descartada' || decisiones.some(d => d.capa_apoyo_id === c.id)
+      m.set(c.id, usada ? 'usada' : rechazada ? 'descartada' : 'libre')
+    }
+    return m
+  }, [capasApoyo, revisiones, decisiones])
+  const apoyoSel = capa === 'sitios' ? capasApoyo.find(c => c.id === selApoyo) ?? null : null
+  const decisionSel = apoyoSel ? decisiones.find(d => d.capa_apoyo_id === apoyoSel.id) ?? null : null
+
+  /** La entrada de la evaluación de un sitio (su caracterización biofísica). */
+  const zonaEvalDe = useCallback((z: ZonaVigente) => {
+    const clave = claveSitio(z)
+    return evaluacion?.zonas.find(x => (!!z.zona_id && x.zona_id === z.zona_id) || (!!clave && x.revision_local_id === clave))
+  }, [evaluacion])
+  const proyectoDe = (z: ZonaVigente): Proyecto | null => z.revision?.proyecto ?? zonaEvalDe(z)?.proyecto ?? null
+
+  // Al cambiar de selección: el proyecto del sitio (o el sugerido por el área de
+  // apoyo) y sin un rechazo a medias.
+  function seleccionarSitio(z: ZonaVigente) {
+    setSelApoyo(null)
+    setSelNum(z.zona_numero)
+    setObs(z.revision?.observaciones ?? '')
+    setProyectoSel(proyectoDe(z))
+    setRechazando(false)
+    setMotivo('')
+  }
+  // El clic en el mapa llama a la versión vigente (la capa se pinta en un efecto).
+  const seleccionarSitioRef = useRef<(z: ZonaVigente) => void>(() => {})
+  useEffect(() => { seleccionarSitioRef.current = seleccionarSitio })
+  function seleccionarApoyo(c: CapaApoyo) {
+    setSelNum(null)
+    setSelLim(null)
+    setSelApoyo(c.id)
+    setProyectoSel(proyectoSugeridoDeClase(c.clase))
+    setRechazando(false)
+    setMotivo('')
+  }
 
   // Campo primero sin límite todavía: se empieza por el límite del predio.
   useEffect(() => {
@@ -240,11 +316,16 @@ export function SigPage() {
     if (!grupo) return
     grupo.clearLayers()
     if (!verApoyo) return
+    // Se tocan solo en la capa de sitios y mirando (no mientras se dibuja o edita).
+    const tocables = capa === 'sitios' && modo === 'ver'
     for (const c of capasApoyo) {
       const f = parseGeom(c.geojson)
-      if (f) L.geoJSON(f, { style: estiloApoyo(c), interactive: false }).addTo(grupo)
+      if (!f) continue
+      const gj = L.geoJSON(f, { style: estiloApoyo(c, estadoApoyo.get(c.id) ?? 'libre', c.id === selApoyo), interactive: tocables })
+      if (tocables) gj.on('click', () => { if (modoRef.current === 'ver' && capaRef.current === 'sitios') seleccionarApoyo(c) })
+      gj.addTo(grupo)
     }
-  }, [capasApoyo, verApoyo, familia?.local_id])
+  }, [capasApoyo, verApoyo, familia?.local_id, estadoApoyo, selApoyo, capa, modo])
 
   // ─── Pintar capas cada vez que cambian las zonas o el límite ───────────────
   useEffect(() => {
@@ -277,7 +358,7 @@ export function SigPage() {
         continue
       }
       const gj = L.geoJSON(f, { style: estiloZona(z, z.zona_numero === selNum) })
-      gj.on('click', () => { if (modoRef.current === 'ver') { setSelNum(z.zona_numero); setObs(z.revision?.observaciones ?? '') } })
+      gj.on('click', () => { if (modoRef.current === 'ver') seleccionarSitioRef.current(z) })
       gj.addTo(zonasLayerRef.current!)
       const poly = gj.getLayers()[0] as L.Polygon
       capasPorZonaRef.current.set(z.zona_numero, poly)
@@ -373,6 +454,7 @@ export function SigPage() {
     setCapa(c)
     setSelNum(null)
     setSelLim(null)
+    setSelApoyo(null)
     setObs('')
   }
 
@@ -385,13 +467,14 @@ export function SigPage() {
   async function upsertRevision(
     objetivo: { revision: RevisionRecord | null; zona_id: string | null; numero: number; tipo: TipoRevision },
     cambios: CambiosRevision,
+    observaciones: string = obs,
   ) {
     if (!familia?.predio_core_id) return
     const previa = objetivo.revision && objetivo.revision.sync_status !== 'synced' ? objetivo.revision : null
     if (previa) {
       await db.revisiones.update(previa.id!, {
         ...fusionarRevision(previa, cambios),
-        observaciones: obs,
+        observaciones,
         sync_status: 'pending',
         sync_error: null,
         updated_at: new Date().toISOString(),
@@ -402,7 +485,7 @@ export function SigPage() {
         predio_core_id:   familia.predio_core_id,
         zona_id:          objetivo.zona_id,
         zona_numero:      objetivo.numero,
-        observaciones:    obs,
+        observaciones,
         tipo:             objetivo.tipo,
         ...cambios,
       }))
@@ -415,19 +498,86 @@ export function SigPage() {
     : limSel ? { revision: limSel.revision, zona_id: limSel.zona_id, numero: limSel.numero, tipo: 'finca' as const }
     : null
 
+  // Un sitio se confirma con su tipo de proyecto; el límite del predio no lleva.
   async function confirmarSel() {
     const o = objetivoSel()
-    if (!o) return
-    await upsertRevision(o, { accion: 'confirmada', metodo: null, geojson: null, area_ha: null })
+    if (!o || (zonaSel && !proyectoSel)) return
+    await upsertRevision(o, { accion: 'confirmada', metodo: null, geojson: null, area_ha: null, proyecto: zonaSel ? proyectoSel : null })
   }
 
-  async function descartarZona() {
-    if (!zonaSel) return
-    if (!window.confirm(`¿Descartar la Zona ${zonaSel.zona_numero}? Quedará marcada como NO apta para siembra.`)) return
+  /**
+   * Cambiar el tipo de proyecto de un sitio. Sin revisión todavía, solo se
+   * elige (lo guarda «Confirmar»). Con una revisión pendiente, se le cambia. Con
+   * una ya subida, se crea otra encima ('confirmada' con el proyecto nuevo):
+   * fusionarRevision no deja que eso borre una geometría corregida.
+   */
+  async function cambiarProyecto(p: Proyecto) {
+    setProyectoSel(p)
+    const rev = zonaSel?.revision
+    if (!zonaSel || !rev || zonaSel.descartada) return
+    if (rev.sync_status !== 'synced') {
+      await db.revisiones.update(rev.id!, { proyecto: p, updated_at: new Date().toISOString() })
+      await cargar()
+    } else if (rev.proyecto !== p) {
+      await upsertRevision(objetivoSel()!, { accion: 'confirmada', metodo: null, geojson: null, area_ha: null, proyecto: p })
+    }
+  }
+
+  // Rechazar un sitio pide el motivo (pedido del usuario, 2026-10-21): queda en
+  // las observaciones de la revisión, que es lo que lee el SIG en la intranet.
+  async function rechazarSitio() {
+    if (!zonaSel || !motivo.trim()) return
+    const m = motivo.trim()
+    setObs(m)
+    setRechazando(false)
     await upsertRevision(
       { revision: zonaSel.revision, zona_id: zonaSel.zona_id, numero: zonaSel.zona_numero, tipo: 'restauracion' },
       { accion: 'descartada', metodo: null, geojson: null, area_ha: null },
+      m,
     )
+  }
+
+  // ─── Áreas de la capa de apoyo ──────────────────────────────────────────────
+  // Usarla = un sitio nuevo con su geometría (y de dónde salió). Rechazarla = con motivo.
+  async function usarApoyo() {
+    if (!apoyoSel || !proyectoSel) return
+    await guardarNueva(apoyoSel.geojson, 'nueva', { proyecto: proyectoSel, capa_apoyo_id: apoyoSel.id })
+  }
+
+  async function rechazarApoyo() {
+    if (!apoyoSel || !familia?.predio_core_id || !motivo.trim()) return
+    await db.decisionesApoyo.add(newDecisionApoyo({
+      familia_local_id: familia.local_id,
+      predio_core_id:   familia.predio_core_id,
+      capa_apoyo_id:    apoyoSel.id,
+      observaciones:    motivo.trim(),
+    }))
+    setRechazando(false)
+    setMotivo('')
+    await cargar()
+  }
+
+  async function deshacerRechazoApoyo() {
+    if (!decisionSel || decisionSel.sync_status === 'synced') return
+    await db.decisionesApoyo.delete(decisionSel.id!)
+    await cargar()
+  }
+
+  /** Ajustar el área antes de usarla: se edita una copia; el área original no se toca. */
+  function empezarEdicionApoyo() {
+    const map = mapRef.current
+    const f = apoyoSel ? parseGeom(apoyoSel.geojson) : null
+    if (!map || !apoyoSel || !f || !proyectoSel) return
+    const ghost = L.geoJSON(f, { style: ESTILO_FANTASMA })
+    ghost.addTo(map)
+    ghostLayerRef.current = ghost
+    const copia = L.geoJSON(f, { style: { color: colorApoyo(apoyoSel.clase), weight: 3, fillOpacity: 0.25 } }).getLayers()[0] as L.Polygon
+    copia.addTo(zonasLayerRef.current!)
+    copia.pm.enable({ allowSelfIntersection: false, removeVertexOn: 'click', snappable: false })
+    copia.bringToFront()
+    editLayerRef.current = copia
+    editandoApoyoRef.current = apoyoSel
+    setModo('editar')
   }
 
   async function restaurarSel() {
@@ -475,22 +625,33 @@ export function SigPage() {
 
   async function guardarEdicion() {
     const capaEd = editLayerRef.current
+    const apoyo = editandoApoyoRef.current
     const o = objetivoSel()
-    if (!capaEd || !o) return
+    if (!capaEd || (!o && !apoyo)) return
     capaEd.pm.disable()
     const feat = capaEd.toGeoJSON()
     const geomStr = JSON.stringify(feat.geometry)
     setModo('ver')
     editLayerRef.current = null
+    editandoApoyoRef.current = null
     quitarFantasma()
+    if (apoyo) {
+      await guardarNueva(geomStr, 'nueva', { proyecto: proyectoSel, capa_apoyo_id: apoyo.id })
+      return
+    }
+    if (!o) return
     // Lo dibujado en campo (aún sin id) que se re-edita sigue siendo 'nuevo'
     const accion = o.zona_id === null && o.revision?.sync_status !== 'synced' ? 'nueva' : 'modificada'
-    await upsertRevision(o, { accion, metodo: accion === 'nueva' ? (o.revision?.metodo ?? 'nueva') : 'vertices', geojson: geomStr, area_ha: areaHa(geomStr) })
+    await upsertRevision(o, {
+      accion, metodo: accion === 'nueva' ? (o.revision?.metodo ?? 'nueva') : 'vertices', geojson: geomStr, area_ha: areaHa(geomStr),
+      proyecto: zonaSel ? proyectoSel : null,
+    })
   }
 
   function cancelarEdicion() {
     editLayerRef.current?.pm.disable()
     editLayerRef.current = null
+    editandoApoyoRef.current = null
     quitarFantasma()
     setModo('ver')
     cargar()   // repintar la geometría original
@@ -532,10 +693,11 @@ export function SigPage() {
     await guardarNueva(geomStr, 'gps')
   }
 
-  async function guardarNueva(geomStr: string, metodo: 'nueva' | 'gps') {
+  async function guardarNueva(geomStr: string, metodo: 'nueva' | 'gps', origen?: { proyecto: Proyecto | null; capa_apoyo_id: string }) {
     const f = await db.familias.where('local_id').equals(id!).first()
     if (!f?.predio_core_id) return
-    await db.revisiones.add(newRevision({
+    const tipo = tipoDeCapa(capaRef.current)
+    const nueva = newRevision({
       familia_local_id: f.local_id,
       predio_core_id:   f.predio_core_id,
       zona_id:          null,
@@ -545,10 +707,18 @@ export function SigPage() {
       geojson:          geomStr,
       area_ha:          areaHa(geomStr),
       observaciones:    '',
-      tipo:             tipoDeCapa(capaRef.current),
-    }))
+      tipo,
+      proyecto:         tipo === 'restauracion' ? (origen?.proyecto ?? null) : null,
+      capa_apoyo_id:    origen?.capa_apoyo_id ?? null,
+    })
+    await db.revisiones.add(nueva)
     setModo('ver')
-    await cargar()
+    const leido = await cargar()
+    // Un sitio nuevo queda seleccionado, para elegirle el proyecto y caracterizarlo.
+    const z = tipo === 'restauracion' && leido?.familia
+      ? zonasVigentes(leido.familia, leido.revisiones).find(x => x.revision?.local_id === nueva.local_id)
+      : undefined
+    if (z) seleccionarSitio(z)
   }
 
   async function guardarObservaciones() {
@@ -648,13 +818,13 @@ export function SigPage() {
               <span className="flex items-center gap-1.5 text-gray-600"><RefreshCw size={15} className="animate-spin" /> Buscando señal GPS…</span>
             ) : capa === 'sitios' && posicion?.dentroDe ? (
               <span className="flex items-center gap-1.5 text-emerald-800 font-semibold">
-                <MapPin size={15} /> Estás DENTRO de la Zona {posicion.dentroDe.zona_numero}
+                <MapPin size={15} /> Estás DENTRO del Sitio {posicion.dentroDe.zona_numero}
                 <span className="font-normal text-gray-500">±{Math.round(gps.accuracy)} m</span>
               </span>
             ) : capa === 'sitios' && posicion?.masCercana ? (
               <span className="flex items-center gap-1.5 text-gray-800">
                 <MapPin size={15} className="text-bosque shrink-0" />
-                <span>A <strong>{distanciaTexto(posicion.distancia_m!)}</strong> al <strong>{posicion.rumbo}</strong> de la Zona {posicion.masCercana.zona_numero}
+                <span>A <strong>{distanciaTexto(posicion.distancia_m!)}</strong> al <strong>{posicion.rumbo}</strong> del Sitio {posicion.masCercana.zona_numero}
                 <span className="text-gray-500"> ±{Math.round(gps.accuracy)} m</span></span>
               </span>
             ) : (
@@ -715,7 +885,7 @@ export function SigPage() {
 
       {/* Panel inferior */}
       {modo === 'ver' && (
-        <div className="vidrio !border-x-0 !border-b-0 rounded-t-3xl -mt-5 relative z-[1050] px-4 pt-3 pb-[max(env(safe-area-inset-bottom),1rem)] max-h-[48%] overflow-y-auto">
+        <div className="vidrio !border-x-0 !border-b-0 rounded-t-3xl -mt-5 relative z-[1050] px-4 pt-3 pb-[max(env(safe-area-inset-bottom),1rem)] max-h-[52%] overflow-y-auto">
           {/* Capa: sitios o límite */}
           <div className="grid grid-cols-2 gap-1.5 p-1 rounded-full bg-gray-200/80 mb-3" role="tablist">
             {([['sitios', 'Sitios de siembra', Sprout, sitiosActivos.length], ['limite', 'Límite del predio', Fence, limites.length]] as const).map(([c, txt, Icono, n]) => (
@@ -726,40 +896,109 @@ export function SigPage() {
             ))}
           </div>
 
-          {campoPrimero && !sel && (
+          {campoPrimero && !sel && !apoyoSel && (
             <p className="text-[13px] text-amber-900 bg-amber-100 border border-amber-200 rounded-2xl px-3.5 py-2.5 mb-3">
-              <strong>Campo primero.</strong> Este predio llegó sin propuesta del SIG: delimita el predio y dibuja los sitios de siembra.
-              El SIG los confirma después desde la intranet.
+              <strong>Campo primero.</strong> Este predio llegó sin propuesta del SIG: delimita el predio y dibuja los sitios de siembra
+              {capasApoyo.length > 0 ? ' (o usa las áreas de la capa de apoyo)' : ''}. El SIG los confirma después desde la intranet.
             </p>
           )}
 
-          {capasApoyo.length > 0 && verApoyo && !sel && <LeyendaApoyo capas={capasApoyo} />}
+          {capasApoyo.length > 0 && verApoyo && !sel && !apoyoSel && capa === 'sitios' && <LeyendaApoyo capas={capasApoyo} estados={estadoApoyo} />}
 
-          {!sel ? (
+          {apoyoSel ? (
+            // ─── Un área de la capa de apoyo ─────────────────────────────────
+            (() => {
+              const estado = estadoApoyo.get(apoyoSel.id) ?? 'libre'
+              const motivoRechazo = decisionSel?.observaciones ?? (apoyoSel.estado_campo === 'descartada' ? apoyoSel.observacion_campo : null)
+              return (
+                <>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                      <h2 className="text-xl text-gray-900">{apoyoSel.nombre ?? 'Área de apoyo'}</h2>
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full"
+                        style={{ background: `${colorApoyo(apoyoSel.clase)}66`, color: '#3f3a32' }}>{etiquetaClase(apoyoSel.clase)}</span>
+                      <span className="text-sm text-gray-600">{apoyoSel.area_ha != null ? `${apoyoSel.area_ha.toFixed(2)} ha` : ''}</span>
+                    </div>
+                    <button onClick={() => setSelApoyo(null)} className="boton-mapa !w-10 !h-10 text-gray-600" aria-label="Cerrar"><X size={18} /></button>
+                  </div>
+
+                  {estado === 'usada' && (
+                    <p className="text-[13px] text-emerald-900 bg-emerald-50 border border-emerald-100 rounded-2xl px-3.5 py-2.5 mb-2">
+                      Ya se usó como sitio de siembra. Trabaja ese sitio desde la lista (tipo de proyecto y caracterización).
+                    </p>
+                  )}
+                  {estado === 'descartada' && (
+                    <div className="text-[13px] text-gray-800 bg-gray-100 rounded-2xl px-3.5 py-2.5 mb-2">
+                      <p><strong>Rechazada en terreno.</strong>{motivoRechazo ? ` Motivo: «${motivoRechazo}».` : ''}</p>
+                      {decisionSel && decisionSel.sync_status !== 'synced' && (
+                        <button onClick={deshacerRechazoApoyo} className="boton boton-vidrio !min-h-10 !text-sm mt-2"><Undo2 size={15} /> Deshacer el rechazo</button>
+                      )}
+                    </div>
+                  )}
+
+                  {estado !== 'usada' && (
+                    <>
+                      <p className="text-xs text-gray-600 mb-2">
+                        Si en terreno esta área sirve, úsala como sitio (tal cual o ajustando el borde). El tipo de proyecto viene sugerido
+                        por el SIG: cámbialo si en terreno es otro.
+                      </p>
+                      <SelectorProyecto valor={proyectoSel} onElegir={setProyectoSel} />
+                      {rechazando ? (
+                        <MotivoRechazo motivo={motivo} onMotivo={setMotivo} texto="¿Por qué no sirve esta área?"
+                          onConfirmar={rechazarApoyo} onVolver={() => { setRechazando(false); setMotivo('') }} confirmar="Rechazar área" />
+                      ) : (
+                        <div className={`grid gap-2 ${estado === 'descartada' ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                          <button onClick={usarApoyo} disabled={!proyectoSel} className="boton boton-bosque !flex-col !gap-1 !rounded-2xl !text-[13px] !px-2">
+                            <Check size={20} /> {estado === 'descartada' ? 'Usar de todos modos' : 'Usar como sitio'}
+                          </button>
+                          <button onClick={empezarEdicionApoyo} disabled={!proyectoSel} className="boton boton-pizarra !flex-col !gap-1 !rounded-2xl !text-[13px] !px-2">
+                            <Pencil size={20} /> Ajustar y usar
+                          </button>
+                          {estado !== 'descartada' && (
+                            <button onClick={() => setRechazando(true)} className="boton boton-arcilla !flex-col !gap-1 !rounded-2xl !text-[13px] !px-2">
+                              <Trash2 size={20} /> Rechazar
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {!proyectoSel && !rechazando && <p className="text-xs text-amber-800 mt-2">Elige el tipo de proyecto para usar el área.</p>}
+                    </>
+                  )}
+                </>
+              )
+            })()
+          ) : !sel ? (
             capa === 'sitios' ? (
               zonas.length === 0 ? (
                 <Vacio
-                  texto="Todavía no hay sitios de siembra. Dibújalos en el mapa o trázalos caminando el borde con el GPS."
+                  texto={capasApoyo.length > 0
+                    ? 'Todavía no hay sitios de siembra. Toca un área de color de la capa de apoyo para usarla, o dibuja el sitio en el mapa o trázalo caminando con el GPS.'
+                    : 'Todavía no hay sitios de siembra. Dibújalos en el mapa o trázalos caminando el borde con el GPS.'}
                   onDibujar={empezarDibujo} onGps={empezarGps} gps={!!gps} />
               ) : (
                 <>
                   <div className="flex gap-2 flex-wrap">
                     {zonas.map(z => {
                       const e = etiquetaRevision(z)
+                      const p = proyectoDe(z)
+                      const c = listoParaCaracterizar(z) ? ETIQUETA_CARACTERIZACION[estadoCaracterizacion(zonaEvalDe(z))] : null
                       return (
-                        <button key={z.zona_numero}
-                          onClick={() => { setSelNum(z.zona_numero); setObs(z.revision?.observaciones ?? '') }}
-                          className="tarjeta flex items-center gap-2 !rounded-2xl px-3.5 py-2.5 text-left min-h-12 active:scale-[0.98] transition-transform">
-                          <span className="text-[15px] font-semibold text-gray-900">Zona {z.zona_numero}</span>
+                        <button key={z.zona_numero} onClick={() => seleccionarSitio(z)}
+                          className="tarjeta flex items-center gap-2 flex-wrap !rounded-2xl px-3.5 py-2.5 text-left min-h-12 active:scale-[0.98] transition-transform">
+                          <span className="text-[15px] font-semibold text-gray-900">Sitio {z.zona_numero}</span>
                           <span className="text-sm text-gray-600">{z.area_ha != null ? `${z.area_ha.toFixed(1)} ha` : '—'}</span>
+                          {p && !z.descartada && <span className="text-[12px] text-gray-700">{nombreProyecto(p)}</span>}
                           <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${e.cls}`}>{e.txt}</span>
+                          {c && <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${c.cls}`}>{c.txt}</span>}
                         </button>
                       )
                     })}
                   </div>
                   <p className="text-xs text-gray-600 mt-3">
-                    Toca una zona para verificarla: confirmarla tal cual, corregir su límite o descartarla. Con <strong>+</strong> dibujas un sitio nuevo
-                    y con la huella lo trazas caminando. La línea blanca punteada es el límite del predio.
+                    Toca un sitio para verificarlo: confirmarlo con su tipo de proyecto, corregir su límite o rechazarlo (con el motivo).
+                    Confirmado, corregido o dibujado, se le llena la <strong>caracterización biofísica</strong> desde aquí.
+                    Con <strong>+</strong> dibujas un sitio nuevo y con la huella lo trazas caminando.
+                    {capasApoyo.length > 0 && ' Las áreas de color de la capa de apoyo también se tocan.'}
                   </p>
                 </>
               )
@@ -795,7 +1034,7 @@ export function SigPage() {
               <div className="flex items-center justify-between gap-2 mb-2">
                 <div className="flex items-center gap-2 min-w-0 flex-wrap">
                   <h2 className="text-xl text-gray-900">
-                    {zonaSel ? `Zona ${zonaSel.zona_numero}` : limites.length > 1 ? `Límite ${limSel!.numero}` : 'Límite del predio'}
+                    {zonaSel ? `Sitio ${zonaSel.zona_numero}` : limites.length > 1 ? `Límite ${limSel!.numero}` : 'Límite del predio'}
                   </h2>
                   {et && <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${et.cls}`}>{et.txt}</span>}
                   <span className="text-sm text-gray-600">{sel.area_ha != null ? `${sel.area_ha.toFixed(2)} ha` : ''}</span>
@@ -804,13 +1043,19 @@ export function SigPage() {
               </div>
 
               {zonaSel && posicion?.dentroDe?.zona_numero === zonaSel.zona_numero && (
-                <p className="text-sm text-emerald-800 font-semibold mb-2">Estás parado dentro de esta zona</p>
+                <p className="text-sm text-emerald-800 font-semibold mb-2">Estás parado dentro de este sitio</p>
               )}
 
               {zonaSel?.retirada_del_sig && (
                 <p className="text-sm text-gray-700 bg-gray-100 rounded-2xl px-3.5 py-2.5 mb-2">
-                  El SIG cambió esta zona y ya no la incluye. Lo que trabajaste aquí se conserva tal cual, pero no
-                  se le piden más datos — trabaja sobre las zonas vigentes.
+                  El SIG cambió este sitio y ya no lo incluye. Lo que trabajaste aquí se conserva tal cual, pero no
+                  se le piden más datos — trabaja sobre los sitios vigentes.
+                </p>
+              )}
+
+              {zonaSel?.descartada && zonaSel.revision?.observaciones && (
+                <p className="text-[13px] text-red-900 bg-red-50 border border-red-100 rounded-2xl px-3.5 py-2.5 mb-2">
+                  Motivo del rechazo: «{zonaSel.revision.observaciones}»
                 </p>
               )}
 
@@ -820,32 +1065,66 @@ export function SigPage() {
                 </p>
               )}
 
-              <textarea
-                rows={2}
-                placeholder="Observaciones de campo (opcional)…"
-                value={obs}
-                onChange={e => setObs(e.target.value)}
-                onBlur={guardarObservaciones}
-                disabled={sel.revision?.sync_status === 'synced'}
-                className="mb-3 disabled:bg-gray-50 disabled:text-gray-500"
-              />
+              {zonaSel && !zonaSel.descartada && !zonaSel.retirada_del_sig && (
+                <>
+                  <SelectorProyecto valor={proyectoSel} onElegir={cambiarProyecto} />
+                  {zonaSel.revision?.capa_apoyo_id && (
+                    <p className="text-[11.5px] text-gray-500 -mt-1.5 mb-2.5">Salió de un área de la capa de apoyo.</p>
+                  )}
+                </>
+              )}
 
-              <div className={`grid gap-2 ${zonaSel ? 'grid-cols-3' : 'grid-cols-2'}`}>
-                <button onClick={confirmarSel} disabled={zonaSel?.descartada || yaCorregida}
-                  className="boton boton-bosque !flex-col !gap-1 !rounded-2xl !text-[13px] !px-2">
-                  <Check size={20} /> {yaCorregida ? (sel.revision?.accion === 'nueva' ? 'Guardado' : 'Ya corregida') : 'Confirmar'}
-                </button>
-                <button onClick={empezarEdicion} disabled={zonaSel?.descartada}
-                  className="boton boton-pizarra !flex-col !gap-1 !rounded-2xl !text-[13px] !px-2">
-                  <Pencil size={20} /> {zonaSel ? 'Corregir límite' : 'Corregir lindero'}
-                </button>
-                {zonaSel && (
-                  <button onClick={descartarZona} disabled={zonaSel.descartada}
-                    className="boton boton-arcilla !flex-col !gap-1 !rounded-2xl !text-[13px] !px-2">
-                    <Trash2 size={20} /> Descartar
+              {!zonaSel?.descartada && (
+                <textarea
+                  rows={2}
+                  placeholder="Observaciones de campo (opcional)…"
+                  value={obs}
+                  onChange={e => setObs(e.target.value)}
+                  onBlur={guardarObservaciones}
+                  disabled={sel.revision?.sync_status === 'synced'}
+                  className="mb-3 disabled:bg-gray-50 disabled:text-gray-500"
+                />
+              )}
+
+              {rechazando && zonaSel ? (
+                <MotivoRechazo motivo={motivo} onMotivo={setMotivo} texto={`¿Por qué no sirve el sitio ${zonaSel.zona_numero}?`}
+                  onConfirmar={rechazarSitio} onVolver={() => { setRechazando(false); setMotivo('') }} confirmar="Rechazar sitio" />
+              ) : (
+                <div className={`grid gap-2 ${zonaSel ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                  <button onClick={confirmarSel} disabled={zonaSel?.descartada || yaCorregida || (!!zonaSel && !proyectoSel)}
+                    className="boton boton-bosque !flex-col !gap-1 !rounded-2xl !text-[13px] !px-2">
+                    <Check size={20} /> {yaCorregida ? (sel.revision?.accion === 'nueva' ? 'Guardado' : 'Ya corregida') : 'Confirmar'}
                   </button>
-                )}
-              </div>
+                  <button onClick={empezarEdicion} disabled={zonaSel?.descartada}
+                    className="boton boton-pizarra !flex-col !gap-1 !rounded-2xl !text-[13px] !px-2">
+                    <Pencil size={20} /> {zonaSel ? 'Corregir límite' : 'Corregir lindero'}
+                  </button>
+                  {zonaSel && (
+                    <button onClick={() => setRechazando(true)} disabled={zonaSel.descartada}
+                      className="boton boton-arcilla !flex-col !gap-1 !rounded-2xl !text-[13px] !px-2">
+                      <Trash2 size={20} /> Rechazar
+                    </button>
+                  )}
+                </div>
+              )}
+              {zonaSel && !zonaSel.descartada && !proyectoSel && !rechazando && !yaCorregida && (
+                <p className="text-xs text-amber-800 mt-2">Elige el tipo de proyecto para confirmar el sitio.</p>
+              )}
+
+              {/* Confirmado, corregido o dibujado: la caracterización biofísica de este sitio */}
+              {zonaSel && listoParaCaracterizar(zonaSel) && !rechazando && (() => {
+                const c = ETIQUETA_CARACTERIZACION[estadoCaracterizacion(zonaEvalDe(zonaSel))]
+                return (
+                  <>
+                    <button onClick={() => navigate(`/sig/${id}/sitio/${claveSitio(zonaSel)}`)} disabled={!proyectoSel}
+                      className="boton boton-ambar w-full mt-2.5 !justify-between">
+                      <span className="flex items-center gap-2"><ClipboardList size={18} /> Caracterización biofísica</span>
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${c.cls}`}>{c.txt}</span>
+                    </button>
+                    {!proyectoSel && <p className="text-xs text-amber-800 mt-1.5">Elige primero el tipo de proyecto del sitio.</p>}
+                  </>
+                )
+              })()}
 
               {yaCorregida && (
                 <p className="text-[13px] text-blue-900 bg-blue-50 border border-blue-100 rounded-2xl px-3.5 py-2.5 mt-2.5">
@@ -855,7 +1134,7 @@ export function SigPage() {
                 </p>
               )}
 
-              {revPendiente && (
+              {revPendiente && !rechazando && (
                 <button onClick={restaurarSel} className="boton boton-vidrio w-full mt-2.5 !text-sm">
                   <Undo2 size={16} /> Deshacer este cambio (aún sin sincronizar)
                 </button>
@@ -871,10 +1150,52 @@ export function SigPage() {
   )
 }
 
-/** Qué es cada color de la capa de apoyo. Es guía: no se toca ni se evalúa. */
-function LeyendaApoyo({ capas }: { capas: CapaApoyo[] }) {
+/** Confirmado, corregido o dibujado: ya se le puede llenar la caracterización biofísica. */
+function listoParaCaracterizar(z: ZonaVigente): boolean {
+  return !z.descartada && !z.retirada_del_sig && !!z.revision
+    && (z.revision.accion === 'confirmada' || z.revision.accion === 'modificada' || z.revision.accion === 'nueva')
+}
+
+/** Ley del Árbol, Conexión o Pastoreo. */
+function SelectorProyecto({ valor, onElegir }: { valor: Proyecto | null; onElegir: (p: Proyecto) => void }) {
+  return (
+    <div className="mb-3">
+      <p className="text-xs font-semibold text-gray-700 mb-1.5">Tipo de proyecto</p>
+      <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Tipo de proyecto">
+        {PROYECTOS.map(p => (
+          <button key={p.id} role="radio" aria-checked={valor === p.id} onClick={() => onElegir(p.id)} title={p.ayuda}
+            className={`min-h-11 rounded-2xl text-[13px] font-semibold border transition-colors ${valor === p.id ? 'boton-bosque border-transparent' : 'bg-white/70 border-gray-200 text-gray-700'}`}>
+            {p.nombre}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** Rechazar pide el motivo: sin él no se puede. */
+function MotivoRechazo({ motivo, onMotivo, texto, onConfirmar, onVolver, confirmar }: {
+  motivo: string; onMotivo: (m: string) => void; texto: string
+  onConfirmar: () => void; onVolver: () => void; confirmar: string
+}) {
+  return (
+    <div className="rounded-2xl border border-red-200 bg-red-50/70 p-3">
+      <label className="block text-sm font-semibold text-red-900 mb-1.5">{texto} <span className="font-normal">(obligatorio)</span></label>
+      <textarea rows={2} autoFocus value={motivo} onChange={e => onMotivo(e.target.value)}
+        placeholder="Ej: es humedal, tiene bosque, el dueño lo usa para el ganado…" className="mb-2.5" />
+      <div className="grid grid-cols-2 gap-2">
+        <button onClick={onConfirmar} disabled={!motivo.trim()} className="boton boton-arcilla"><Trash2 size={16} /> {confirmar}</button>
+        <button onClick={onVolver} className="boton boton-vidrio"><X size={16} /> Volver</button>
+      </div>
+    </div>
+  )
+}
+
+/** Qué es cada color de la capa de apoyo y cuánto queda por trabajar. */
+function LeyendaApoyo({ capas, estados }: { capas: CapaApoyo[]; estados: Map<string, EstadoApoyo> }) {
   const porClase = new Map<string, number>()
   for (const c of capas) porClase.set(c.clase ?? 'Otra', (porClase.get(c.clase ?? 'Otra') ?? 0) + (c.area_ha ?? 0))
+  const libres = capas.filter(c => (estados.get(c.id) ?? 'libre') === 'libre').length
   return (
     <div className="rounded-2xl border border-gray-200 bg-white/60 px-3.5 py-2.5 mb-3 text-[12.5px] text-gray-700">
       <p className="flex items-center gap-1.5 font-semibold text-gray-800 mb-1">
@@ -885,11 +1206,13 @@ function LeyendaApoyo({ capas }: { capas: CapaApoyo[] }) {
           <li key={clase} className="flex items-center gap-1.5">
             <span className="inline-block w-3.5 h-3.5 rounded-[4px] border-2 border-dotted"
               style={{ borderColor: colorApoyo(clase), background: `${colorApoyo(clase)}55` }} />
-            {clase} <span className="text-gray-500">{ha.toFixed(1)} ha</span>
+            {etiquetaClase(clase)} <span className="text-gray-500">{ha.toFixed(1)} ha</span>
           </li>
         ))}
       </ul>
-      <p className="text-[11.5px] text-gray-500 mt-1">Es una guía: no son sitios de siembra. Dibuja los sitios encima, donde de verdad se va a sembrar.</p>
+      <p className="text-[11.5px] text-gray-500 mt-1">
+        Toca un área para usarla como sitio (tal cual o ajustada) o rechazarla. {libres > 0 ? `Quedan ${libres} por revisar.` : 'Ya se revisaron todas.'}
+      </p>
     </div>
   )
 }

@@ -1,4 +1,5 @@
 import { hoyLocal } from '../lib/fecha'
+import type { Proyecto } from '../lib/proyectos'
 // ─── Revisión de zona (SIG II) ────────────────────────────────────────────────
 // Cada acción del técnico sobre una zona en el módulo SIG se guarda como una
 // revisión local (offline, Dexie) y al sincronizar se aplica en el servidor
@@ -30,6 +31,13 @@ export interface RevisionRecord {
   area_ha: number | null               // calculada con turf al guardar
   observaciones: string
   zona_numero: number                  // para mostrar "Zona N" en la UI
+  // Tipo de proyecto del sitio (Ley del Árbol, Conexión, Pastoreo) y, si el sitio
+  // salió de un área de la capa de apoyo, cuál. Viajan aparte de la geometría
+  // (RPC geo.anotar_revision_campo, migration_sitios_proyecto.sql): si el servidor
+  // todavía no los recibe, la revisión sube igual y esto queda 'pendiente'.
+  proyecto?: Proyecto | null
+  capa_apoyo_id?: string | null
+  anotacion_sync?: 'pendiente' | 'synced' | null
   sync_status: 'pending' | 'synced' | 'error'
   sync_error: string | null
   created_by: string
@@ -44,6 +52,7 @@ export interface CambiosRevision {
   metodo: RevisionRecord['metodo']
   geojson: string | null
   area_ha: number | null
+  proyecto?: Proyecto | null
 }
 
 /**
@@ -69,12 +78,16 @@ export function fusionarRevision(
   const traeGeometriaPropia =
     !!previa.geojson && (previa.accion === 'modificada' || previa.accion === 'nueva')
 
+  // El tipo de proyecto tampoco se pierde: una acción que no lo trae deja el que había.
+  const proyecto = cambios.proyecto ?? previa.proyecto ?? null
+
   if (cambios.accion === 'confirmada' && traeGeometriaPropia) {
     return {
       accion:  previa.accion,
       metodo:  previa.metodo,
       geojson: previa.geojson,
       area_ha: previa.area_ha,
+      proyecto,
     }
   }
 
@@ -83,6 +96,7 @@ export function fusionarRevision(
     geojson: cambios.geojson ?? previa.geojson,
     area_ha: cambios.area_ha ?? previa.area_ha,
     metodo:  cambios.metodo  ?? previa.metodo,
+    proyecto,
   }
 }
 
@@ -97,6 +111,8 @@ export function newRevision(base: {
   zona_numero: number
   observaciones?: string
   tipo?: TipoRevision
+  proyecto?: Proyecto | null
+  capa_apoyo_id?: string | null
 }): RevisionRecord {
   return {
     local_id:    crypto.randomUUID(),
@@ -107,6 +123,46 @@ export function newRevision(base: {
     created_at:  new Date().toISOString(),
     updated_at:  new Date().toISOString(),
     observaciones: base.observaciones ?? '',
+    ...base,
+  }
+}
+
+// ─── Área de la capa de apoyo rechazada en terreno ───────────────────────────
+// Usar un área como sitio es una revisión 'nueva' con capa_apoyo_id. Rechazarla
+// (con motivo, obligatorio) es esto: se guarda en el celular y sube por el RPC
+// geo.revisar_capa_apoyo (migration_sitios_proyecto.sql), idempotente por local_id.
+export interface DecisionApoyoRecord {
+  id?: number
+  local_id: string
+  familia_local_id: string
+  predio_core_id: string
+  capa_apoyo_id: string
+  accion: 'descartada'
+  observaciones: string
+  created_by: string
+  fecha: string
+  sync_status: 'pending' | 'synced' | 'error'
+  sync_error: string | null
+  created_at: string
+  updated_at: string
+}
+
+export function newDecisionApoyo(base: {
+  familia_local_id: string
+  predio_core_id: string
+  capa_apoyo_id: string
+  observaciones: string
+}): DecisionApoyoRecord {
+  const ahora = new Date().toISOString()
+  return {
+    local_id:    crypto.randomUUID(),
+    accion:      'descartada',
+    created_by:  localStorage.getItem('ae_campo_user') ?? '',
+    fecha:       hoyLocal(),
+    sync_status: 'pending',
+    sync_error:  null,
+    created_at:  ahora,
+    updated_at:  ahora,
     ...base,
   }
 }

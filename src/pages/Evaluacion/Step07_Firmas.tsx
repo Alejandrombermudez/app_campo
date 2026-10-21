@@ -5,7 +5,8 @@ interface Props {
   data: Partial<SeccionFirmas>
   onChange: (d: Partial<SeccionFirmas>) => void
   evaluador1: string
-  evaluador2: string
+  /** Solo el módulo viejo `Predio` lo pasa: AE-CAMPO-001 ya no tiene evaluador 2 (2026-10-21). */
+  evaluador2?: string
 }
 
 export function Step07({ data, onChange, evaluador1, evaluador2 }: Props) {
@@ -19,16 +20,18 @@ export function Step07({ data, onChange, evaluador1, evaluador2 }: Props) {
       </p>
 
       <SignatureCanvas
-        label={`Evaluador 1${evaluador1 ? ` — ${evaluador1}` : ''}`}
+        label={evaluador2 === undefined ? `Quien evalúa${evaluador1 ? ` — ${evaluador1}` : ''}` : `Evaluador 1${evaluador1 ? ` — ${evaluador1}` : ''}`}
         value={data.firma_evaluador1_dataurl ?? null}
         onChange={v => set('firma_evaluador1_dataurl', v)}
       />
 
-      <SignatureCanvas
-        label={`Evaluador 2${evaluador2 ? ` — ${evaluador2}` : ''} (opcional)`}
-        value={data.firma_evaluador2_dataurl ?? null}
-        onChange={v => set('firma_evaluador2_dataurl', v)}
-      />
+      {evaluador2 !== undefined && (
+        <SignatureCanvas
+          label={`Evaluador 2${evaluador2 ? ` — ${evaluador2}` : ''} (opcional)`}
+          value={data.firma_evaluador2_dataurl ?? null}
+          onChange={v => set('firma_evaluador2_dataurl', v)}
+        />
+      )}
 
     </div>
   )

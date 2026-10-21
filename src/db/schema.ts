@@ -4,7 +4,7 @@ import type { EncuestaPredialRecord } from '../types/encuesta'
 import type { PredioRecord } from '../types/predio'
 import type { FamiliaRecord } from '../types/familia'
 import type { PredioHabilitado } from '../types/core'
-import type { RevisionRecord } from '../types/revision'
+import type { RevisionRecord, DecisionApoyoRecord } from '../types/revision'
 
 class AppDB extends Dexie {
   familias!:           EntityTable<FamiliaRecord, 'id'>
@@ -14,6 +14,7 @@ class AppDB extends Dexie {
   predios!:            EntityTable<PredioRecord, 'id'>
   prediosHabilitados!: EntityTable<PredioHabilitado, 'predio_id'>
   revisiones!:         EntityTable<RevisionRecord, 'id'>
+  decisionesApoyo!:    EntityTable<DecisionApoyoRecord, 'id'>
 
   constructor() {
     super('AECampoDB')
@@ -66,6 +67,12 @@ class AppDB extends Dexie {
       predios:            '++id, local_id, sync_status, fecha, municipio, updated_at',
       prediosHabilitados: 'predio_id, nombre_predio, municipio, etapa',
       revisiones:         '++id, local_id, familia_local_id, zona_id, sync_status, updated_at',
+    })
+    // v8: áreas de la capa de apoyo que campo rechazó (con motivo), pendientes de
+    // subir por el RPC geo.revisar_capa_apoyo. Usar un área no va aquí: es una
+    // revisión 'nueva' con capa_apoyo_id.
+    this.version(8).stores({
+      decisionesApoyo:    '++id, local_id, familia_local_id, capa_apoyo_id, sync_status',
     })
   }
 }

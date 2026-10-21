@@ -65,7 +65,13 @@ export function EncuestaPage() {
   useEffect(() => {
     if (!id) { setLoaded(true); return }
     db.encuestas.where('local_id').equals(id).first().then(found => {
-      if (found) { setEv(found); setStepIdx(found.step_completed ?? 0) }
+      if (found) {
+        // Quien encuesta es quien entra al celular: las que se crearon antes de
+        // que se llenara solo lo reciben aquí (se guarda con el siguiente paso).
+        const encuestador = found.sec_general?.encuestador || found.created_by
+        setEv(encuestador ? { ...found, sec_general: { ...found.sec_general, encuestador } } : found)
+        setStepIdx(found.step_completed ?? 0)
+      }
       setLoaded(true)
     })
   }, [id])

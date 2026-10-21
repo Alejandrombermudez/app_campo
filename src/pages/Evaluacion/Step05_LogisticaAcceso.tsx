@@ -6,6 +6,8 @@ import type { SeccionLogistica } from '../../types/evaluacion'
 interface Props {
   zona: number
   localEvaluacionId: string
+  /** Prefijo de las fotos (prefijoFotos de types/evaluacion). Sin él: `zona_<número>`, como antes. */
+  fotoPrefijo?: string
   data: Partial<SeccionLogistica>
   onChange: (d: Partial<SeccionLogistica>) => void
 }
@@ -20,12 +22,13 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   )
 }
 
-export function Step05({ zona, localEvaluacionId, data, onChange }: Props) {
+export function Step05({ zona, localEvaluacionId, fotoPrefijo, data, onChange }: Props) {
+  const pf = fotoPrefijo ?? `zona_${zona}`
   const set = (k: keyof SeccionLogistica, v: unknown) => onChange({ ...data, [k]: v })
 
   return (
     <div className="space-y-6">
-      <h2 className="text-base font-semibold text-bosque">§5 Logística y Acceso — Zona {zona}</h2>
+      <h2 className="text-base font-semibold text-bosque">§5 Logística y Acceso — Sitio {zona}</h2>
 
       {/* ── 1. Punto de acceso / vía pública + FOTO ───────────────────────── */}
       <Field label="Punto de acceso más cercano (vía pública)">
@@ -40,7 +43,7 @@ export function Step05({ zona, localEvaluacionId, data, onChange }: Props) {
       <div className="bg-gray-50 rounded-xl p-3 space-y-2 border border-gray-100">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Foto — Punto de acceso / vía</p>
         <PhotoCapture
-          fieldKey={`zona_${zona}_via`}
+          fieldKey={`${pf}_via`}
           localEvaluacionId={localEvaluacionId}
           currentPhotoId={data.foto_via_id ?? null}
           onCapture={id => set('foto_via_id', id)}

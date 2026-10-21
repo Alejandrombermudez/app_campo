@@ -3,8 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, ClipboardList, BarChart2, ChevronRight, CheckCircle, Clock, AlertCircle, Loader2, Pencil, Satellite, RotateCcw } from 'lucide-react'
 import { db } from '../../db/schema'
 import type { FamiliaRecord } from '../../types/familia'
-import type { EvaluacionRecord, ZonaData } from '../../types/evaluacion'
-import { reconciliarZonas } from '../../types/evaluacion'
+import type { EvaluacionRecord } from '../../types/evaluacion'
+import { reconciliarZonas, estadoCaracterizacion } from '../../types/evaluacion'
+import { abrirEvaluacion } from '../../lib/evaluacion'
 import type { EncuestaPredialRecord, CultivoRow } from '../../types/encuesta'
 import type { RevisionRecord } from '../../types/revision'
 import { zonasActivas, zonasVigentes, limitesVigentes } from '../../lib/geo'
@@ -15,10 +16,9 @@ import { reiniciarPractica, tipoPractica } from '../../lib/practica'
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const CULTIVOS_BASE = ['Café', 'Cacao', 'Caña de azúcar', 'Plátano', 'Yuca', 'Frutales', 'Madera']
 
-function evalStepsTotal(numZonas: number) {
-  // identificacion + cartografia + 3×zonas + riesgos + firmas
-  return 4 + 3 * Math.max(1, numZonas)
-}
+// Formulario general de la evaluación: identificación, cartografía social,
+// sitios, riesgos y firmas. La caracterización de cada sitio va aparte (editor SIG).
+const EVAL_STEPS_TOTAL = 5
 const ENC_STEPS_TOTAL = 8
 
 type FormStatus = 'pendiente' | 'en_curso' | 'completo'
@@ -109,63 +109,22 @@ export function FamiliaDetail() {
   }
 
   // ─── Abrir / crear evaluación de campo ──────────────────────────────────────
-  // SIG I es obligatorio: las zonas NO se inventan, son las que el SIG ya
-  // dibujó (geo.zonas), con las correcciones que campo haya hecho encima.
-  // Si por algún motivo la familia quedó sin zonas activas, se bloquea.
+  // Los sitios NO se inventan aquí: son los vigentes del SIG con lo que campo
+  // haya hecho encima, y se caracterizan desde el editor SIG. El formulario
+  // general (identificación, cartografía social, riesgos, firmas) se puede
+  // llenar aunque todavía no haya sitios.
   async function openCampo() {
-    if (!familia || creating || activas.length === 0) return
+    if (!familia || creating) return
     setCreating(true)
     try {
-      const existing = await db.evaluaciones
-        .where('familia_local_id').equals(familia.local_id).first()
-      if (existing) { navigate(`/evaluacion/${existing.local_id}`); return }
-
-      // La misma persona no puede diligenciar dos veces el mismo predio, aunque
-      // no quede rastro local (otro dispositivo, reinstalación, etc.) — se
-      // verifica contra lo ya sincronizado en Supabase.
-      if (familia.predio_core_id && !familia.es_practica) {
+      const r = await abrirEvaluacion(familia, revisiones)
+      if (!r.ok) {
         const userName = localStorage.getItem('ae_campo_user') ?? ''
-        const propio = await buscarDiligenciamientoPropio('evaluaciones_campo', familia.predio_core_id, userName)
-        if (propio) {
-          alert(`Ya registraste una Evaluación de Campo para "${familia.nombre_predio}" con el nombre "${userName}". No se puede crear otra — la puedes consultar en la pestaña "Todos".`)
-          navigate(`/ver/campo/${propio.id}`)
-          return
-        }
+        alert(`Ya registraste una Evaluación de Campo para "${familia.nombre_predio}" con el nombre "${userName}". No se puede crear otra — la puedes consultar en la pestaña "Todos".`)
+        navigate(`/ver/campo/${r.yaRegistrada.id}`)
+        return
       }
-
-      const zonas: ZonaData[] = activas.map((z, i) => ({
-        zona_id: z.zona_id, zona_numero: i + 1, area_ha_sig: z.area_ha,
-        cobertura: {}, suelo: {}, logistica: {},
-      }))
-
-      const newEval: EvaluacionRecord = {
-        local_id:         crypto.randomUUID(),
-        familia_local_id: familia.local_id,
-        supabase_id:      null,
-        sync_status:      'pending',
-        sync_error:       null,
-        created_at:       new Date().toISOString(),
-        updated_at:       new Date().toISOString(),
-        step_completed:   0,
-        created_by:       localStorage.getItem('ae_campo_user') ?? '',
-        nombre_predio:    familia.nombre_predio,
-        codigo_predio:    '',
-        municipio:        familia.municipio,
-        fecha_visita:     familia.fecha,
-        num_zonas:        zonas.length,
-        seccion_1: {
-          codigo_formato: 'AE-CAMPO-001',
-          version:        '1.0',
-          fecha_visita:   familia.fecha,
-        },
-        seccion_2: {},
-        zonas,
-        seccion_6: {},
-        seccion_7: {},
-      }
-
-      await db.evaluaciones.add(newEval)
-      navigate(`/evaluacion/${newEval.local_id}`)
+      navigate(`/evaluacion/${r.evaluacion.local_id}`)
     } finally {
       setCreating(false)
     }
@@ -208,6 +167,7 @@ export function FamiliaDetail() {
         fecha_encuesta:     familia.fecha,
         sec_general: {
           fecha_encuesta: familia.fecha,
+          encuestador:    localStorage.getItem('ae_campo_user') ?? '',
         },
         sec_vivienda:  {},
         sec_familia:   {},
@@ -247,8 +207,10 @@ export function FamiliaDetail() {
   // El total de pasos sigue el número real de zonas de la evaluación (ya
   // reconciliado contra el SIG), no familia.num_zonas — ese es un snapshot
   // congelado de cuando se creó la familia, no se actualiza con el tiempo.
+  const sitiosEval = (campoEval?.zonas ?? []).filter(z => !z.descartada)
+  const sitiosCaracterizados = sitiosEval.filter(z => estadoCaracterizacion(z) === 'completa').length
   const campoStatus: FormStatus = !campoEval ? 'pendiente'
-    : campoEval.step_completed >= evalStepsTotal(campoEval.zonas.length) - 1 ? 'completo'
+    : campoEval.step_completed >= EVAL_STEPS_TOTAL - 1 && sitiosCaracterizados === sitiosEval.length && sitiosEval.length > 0 ? 'completo'
     : 'en_curso'
 
   const predialStatus: FormStatus = !predialEnc ? 'pendiente'
@@ -348,7 +310,7 @@ export function FamiliaDetail() {
         {/* Evaluación de Campo */}
         <button
           onClick={openCampo}
-          disabled={creating || activas.length === 0}
+          disabled={creating}
           className="tarjeta w-full px-4 py-4 flex items-center gap-3 active:scale-[0.99] transition-transform disabled:opacity-60"
         >
           <div className="w-10 h-10 rounded-xl bg-bosque/10 flex items-center justify-center flex-shrink-0">
@@ -360,8 +322,8 @@ export function FamiliaDetail() {
             <p className="text-sm font-semibold text-gray-800">Evaluación de Campo</p>
             <p className="text-xs text-gray-500 mb-1">
               {activas.length === 0
-                ? (campoPrimero ? 'Primero dibuja los sitios de siembra en el Módulo SIG' : 'Sin zonas activas — revisa el módulo SIG')
-                : `AE-CAMPO-001 · ${activas.length} zona${activas.length > 1 ? 's' : ''}`}
+                ? (campoPrimero ? 'Formulario del predio · los sitios se dibujan en el Módulo SIG' : 'Formulario del predio · sin sitios activos en el Módulo SIG')
+                : `AE-CAMPO-001 · ${sitiosCaracterizados} de ${activas.length} sitio${activas.length > 1 ? 's' : ''} caracterizado${activas.length > 1 ? 's' : ''} (en el Módulo SIG)`}
             </p>
             <StatusBadge status={campoStatus} />
           </div>

@@ -1,5 +1,6 @@
 import type { ZonaSig } from './core'
 import type { ZonaVigente } from '../lib/geo'
+import type { Proyecto } from '../lib/proyectos'
 
 // ─── §1 Identificación ───────────────────────────────────────────────────────
 // nombre_predio/municipio/vereda/propietario_tenedor/contacto_propietario ya
@@ -107,6 +108,54 @@ export interface ZonaData {
   // zona_id sigue null — es RevisionRecord.local_id, estable aunque no haya
   // sincronizado. No tiene otro uso (no es FK a nada en Supabase).
   revision_local_id?: string | null
+  // Tipo de proyecto del sitio: espejo del que eligió el técnico en el editor SIG
+  // (lo pone reconciliarZonas desde la revisión). Viaja en zonas_data.
+  proyecto?: Proyecto | null
+  // El número del sitio en el mapa (el que ve el técnico en el editor SIG). No es
+  // zona_numero: ese renumera sin contar los rechazados y lo usan las fotos viejas.
+  numero_mapa?: number
+  // Prefijo estable de las fotos del sitio (`sitio_<uuid>`). Las de antes del
+  // 2026-10-21 usan `zona_<número>`, que cambia si se renumeran los sitios.
+  foto_clave?: string
+}
+
+/** Prefijo de las fotos de una zona (field_key = `${prefijo}_textura`…). */
+export const prefijoFotos = (z: Pick<ZonaData, 'foto_clave' | 'zona_numero'>) => z.foto_clave ?? `zona_${z.zona_numero}`
+
+/** Llave del sitio en la ruta de caracterización: zona_id, o el local_id de la revisión si aún no sincroniza. */
+export const claveSitio = (z: { zona_id: string | null; revision?: { local_id: string } | null; revision_local_id?: string | null }) =>
+  z.zona_id ?? z.revision?.local_id ?? z.revision_local_id ?? null
+
+/**
+ * Lo mínimo para dar por caracterizado un sitio (biofísico §3, §4 y §5, desde el
+ * editor SIG). Lo demás es opcional.
+ */
+const REQUERIDOS = {
+  cobertura: ['cobertura_dominante', 'pct_cobertura_boscosa', 'regeneracion_natural'],
+  suelo:     ['textura_suelo', 'drenaje_superficial', 'pendiente', 'erosion'],
+  logistica: ['medio_acceso_zonas', 'condicion_camino'],
+} as const
+
+export type EstadoCaracterizacion = 'pendiente' | 'en_curso' | 'completa'
+
+export function estadoCaracterizacion(z: Pick<ZonaData, 'cobertura' | 'suelo' | 'logistica'> | undefined): EstadoCaracterizacion {
+  if (!z) return 'pendiente'
+  let llenos = 0, total = 0
+  for (const [seccion, campos] of Object.entries(REQUERIDOS) as [keyof typeof REQUERIDOS, readonly string[]][]) {
+    const datos = (z[seccion] ?? {}) as Record<string, unknown>
+    for (const c of campos) {
+      total++
+      const v = datos[c]
+      if (Array.isArray(v) ? v.length > 0 : v != null && v !== '') llenos++
+    }
+  }
+  return llenos === 0 ? (hayAlgo(z) ? 'en_curso' : 'pendiente') : llenos === total ? 'completa' : 'en_curso'
+}
+
+/** ¿Algún dato de verdad (no vacío) en las tres secciones? Una lista desmarcada no cuenta. */
+function hayAlgo(z: Pick<ZonaData, 'cobertura' | 'suelo' | 'logistica'>): boolean {
+  return [z.cobertura, z.suelo, z.logistica].some(sec =>
+    Object.values(sec ?? {}).some(v => (Array.isArray(v) ? v.length > 0 : v != null && v !== '')))
 }
 
 /** Construye una zona de evaluación a partir de una zona real del SIG. */
@@ -182,6 +231,9 @@ export function reconciliarZonas(actuales: ZonaData[], vigentes: ZonaVigente[]):
       // Con zona_id se conserva la llave de la revisión si la traía: es con la
       // que mergeZonas reconoce la copia que ya esté en la nube sin zona_id.
       revision_local_id:  v.zona_id ? (prev?.revision_local_id ?? undefined) : (v.revision?.local_id ?? null),
+      proyecto:           v.revision?.proyecto ?? prev?.proyecto ?? null,
+      numero_mapa:        v.zona_numero,
+      ...(prev?.foto_clave ? { foto_clave: prev.foto_clave } : {}),
     })
   }
 

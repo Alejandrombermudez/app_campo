@@ -87,15 +87,35 @@ export async function fetchCapasApoyo(): Promise<Map<string, CapaApoyo[]>> {
     console.error('[core] fetchCapasApoyo error:', error.message)
     throw new Error(`No se pudieron consultar las capas de apoyo: ${error.message}`)
   }
+  const decisiones = await fetchDecisionesApoyo()
   for (const c of (data ?? []) as CapaRpcRow[]) {
     const lista = porPredio.get(c.predio_id) ?? []
+    const d = decisiones.get(c.id)
     lista.push({
       id: c.id, capa: c.capa, clase: c.clase, nombre: c.nombre,
       area_ha: c.area_ha == null ? null : Number(c.area_ha), geojson: c.geojson,
+      estado_campo: d?.estado ?? null, observacion_campo: d?.observaciones ?? null,
     })
     porPredio.set(c.predio_id, lista)
   }
   return porPredio
+}
+
+/**
+ * Qué áreas de apoyo ya usó o rechazó campo, en cualquier celular (RPC
+ * geo.decisiones_capa_apoyo_campo, migration_sitios_proyecto.sql). Es un dato
+ * de ayuda: si falla o la función no existe, se sigue sin él.
+ */
+async function fetchDecisionesApoyo(): Promise<Map<string, { estado: 'usada' | 'descartada'; observaciones: string | null }>> {
+  const m = new Map<string, { estado: 'usada' | 'descartada'; observaciones: string | null }>()
+  try {
+    const { data, error } = await supabase.schema('geo').rpc('decisiones_capa_apoyo_campo')
+    if (error) return m
+    for (const d of (data ?? []) as { capa_apoyo_id: string; estado: 'usada' | 'descartada'; observaciones: string | null }[]) {
+      m.set(d.capa_apoyo_id, { estado: d.estado, observaciones: d.observaciones })
+    }
+  } catch { /* sin señal: sin el dato */ }
+  return m
 }
 
 /**
