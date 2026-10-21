@@ -1,0 +1,13 @@
+{
+  "name": "manual-app-campo",
+  "private": true,
+  "type": "module",
+  "description": "Capturas del manual de usuario de App Campo (puppeteer-core con el Chrome instalado).",
+  "scripts": {
+    "capturas": "node capturas.mjs",
+    "pdf": "python -I build_manual.py"
+  },
+  "dependencies": {
+    "puppeteer-core": "^24.10.2"
+  }
+}
