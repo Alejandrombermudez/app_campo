@@ -11,16 +11,17 @@ que no se deben re-litigar sin el usuario.
 
 ## Qué hace
 
-**Regla vigente desde `migration_campo_primero.sql` (2026-10-20, decisión del usuario; rama
-`campo-primero-ldh`, migración sin correr):** todo predio que jurídica registra (expediente `activo`) se ve
-en esta app de una vez, sin «Enviar a Campo» y sin exigir cartografía. La vista deduce el flujo:
+**Regla vigente desde `migration_campo_primero.sql` (decisión del usuario del 2026-10-20; la migración
+corrió el 2026-10-21 y se verificó por REST: 124 predios, 120 «campo primero» y 4 «SIG primero»):** todo
+predio que jurídica registra (expediente `activo`) se ve en esta app de una vez, sin «Enviar a Campo» y sin
+exigir cartografía. La vista deduce el flujo:
 - **`sig_primero`** — el SIG le propuso sitios que siguen en juego: campo los verifica y corrige.
 - **`campo_primero`** — no hay propuesta: en terreno se dibujan el **límite del predio** y los **sitios de
   siembra** desde cero y el SIG confirma después. Los sitios que dibuja campo no le cambian el flujo.
 
 La app **nunca** crea predios: el predio existe en jurídica, lo que se dibuja son geometrías por revisiones.
-Antes de la migración la vista vieja sigue mandando (solo predios en etapa campo con sitios del SIG) y la
-app lo tolera: sin la columna `flujo_campo` todo se trata como `sig_primero`.
+Si la vista no trae la columna `flujo_campo` (una base sin la migración), la app lo tolera: todo se trata
+como `sig_primero`.
 
 **Capas de apoyo** (`geo.capas_apoyo`, RPC `geo.capas_apoyo_campo()`, una sola llamada por descarga): guía
 de referencia en el mapa —p. ej. las áreas elegibles de Ley del Árbol y carbono del SHP de Lácteos del
@@ -147,6 +148,9 @@ No escribas hexadecimales en clases: usa `bosque`, `ambar`, `hueso`…
 
 - No ejecutar DDL. Migraciones en `../Intranet-AE/docs/sql/`, las corre el usuario.
 - `migration_zona_revision.sql` **ya se corrió** (2026-07-28) y `migration_geo_versionado.sql` también (2026-08-11, verificado por REST el 12: `geo.zonas_lote` existe, `revisar_zona` con 10 argumentos sin sobrecarga duplicada). Las correcciones de zonas hechas en campo sincronizan.
+  `migration_campo_primero.sql` corrió el 2026-10-21 (`revisar_zona_campo`, `decidir_limite`, `capas_apoyo_campo`
+  y `geo.capas_apoyo` verificados por REST), y ese mismo día la carga de Elegibilidad LDH (fuera del repo):
+  9 límites de predio y 187 áreas elegibles como capa de apoyo en 38 predios.
 - **Esta app es productiva con gente real usándola.** Al 2026-08-12: 2 predios en campo (La Dalia y Versalles), 27 revisiones de zonas sincronizadas, evaluadores "José Jarlinson vega" y "Natalia". Antes de tocar el flujo de sincronización, ten presente que hay trabajo de terreno en juego.
 - `.env` trae la anon key (gitignored) — no hay service role aquí, esta app no la necesita.
 - Local: `npm install && npm run dev` (puerto 5173). Type-check: `tsc -b --noEmit`. Build: `npm run build`.

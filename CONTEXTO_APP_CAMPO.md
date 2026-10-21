@@ -1,7 +1,11 @@
 # Contexto — App de Campo (app_campo)
 
 > **Documento de traspaso entre sesiones.** Qué es esta app, qué se hizo, qué falta y cómo retomar.
-> Última actualización: **2026-10-15** — revisión del ciclo campo ↔ SIG contra la base real y tres arreglos
+> Última actualización: **2026-10-21** — **campo primero** en producción: corrió `migration_campo_primero.sql`
+> y la rama `campo-primero-ldh` se unió a `main`. Todo predio con expediente activo se ve en la app (ya no
+> exige SIG I ni «Enviar a Campo», ver `CLAUDE.md` §«Qué hace»), con capa de apoyo donde la hay. Lo que dicen
+> §1 y §6 sobre «SIG I obligatorio» es la regla de antes.
+> Antes: 2026-10-15 — revisión del ciclo campo ↔ SIG contra la base real y tres arreglos
 > (mapa que se rehacía, encuesta vacía contada como hecha, zona nueva evaluada sin señal); ver §6.
 > Antes: 2026-08-12 — sesión que agregó "Actualizar desde el SIG", arregló la pérdida de
 > correcciones al confirmar, y llevó los resultados de campo a la intranet. La app está **en uso productivo**.
