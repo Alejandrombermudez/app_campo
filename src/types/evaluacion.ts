@@ -1,6 +1,6 @@
 import type { ZonaSig } from './core'
 import type { ZonaVigente } from '../lib/geo'
-import type { Proyecto } from '../lib/proyectos'
+import { normalizarProyecto, type Proyecto } from '../lib/proyectos'
 
 // ─── §1 Identificación ───────────────────────────────────────────────────────
 // nombre_predio/municipio/vereda/propietario_tenedor/contacto_propietario ya
@@ -231,7 +231,7 @@ export function reconciliarZonas(actuales: ZonaData[], vigentes: ZonaVigente[]):
       // Con zona_id se conserva la llave de la revisión si la traía: es con la
       // que mergeZonas reconoce la copia que ya esté en la nube sin zona_id.
       revision_local_id:  v.zona_id ? (prev?.revision_local_id ?? undefined) : (v.revision?.local_id ?? null),
-      proyecto:           v.revision?.proyecto ?? prev?.proyecto ?? null,
+      proyecto:           normalizarProyecto(v.revision?.proyecto ?? prev?.proyecto),
       numero_mapa:        v.zona_numero,
       ...(prev?.foto_clave ? { foto_clave: prev.foto_clave } : {}),
     })

@@ -19,16 +19,17 @@ Object.defineProperty(globalThis, 'localStorage', { value: { getItem: () => 'Té
 
 // ── 1. Equivalencias de la capa de apoyo ──────────────────────────────────────
 ok(proyectoSugeridoDeClase('Ley del Arbol') === 'ley_arbol' && proyectoSugeridoDeClase('Ley del Árbol') === 'ley_arbol', 'Ley del Árbol → Ley del Árbol (con y sin tilde)')
-ok(proyectoSugeridoDeClase('Mercado voluntario de carbono') === 'conexion', 'carbono → Conexión')
-ok(proyectoSugeridoDeClase('No elegible: Cobertura o zonificación') === 'pastoreo', 'no elegible por cobertura o zonificación → Pastoreo')
+ok(proyectoSugeridoDeClase('Mercado voluntario de carbono') === 'mercado_carbono', 'carbono → Mercado voluntario de carbono')
+ok(proyectoSugeridoDeClase('No elegible: Cobertura o zonificación') === 'ganaderia_sostenible', 'no elegible por cobertura o zonificación → Ganadería sostenible')
 ok(proyectoSugeridoDeClase('No elegible: infraestructura') === null && proyectoSugeridoDeClase('Otros') === null && proyectoSugeridoDeClase(null) === null,
   'infraestructura, otros y vacío no sugieren nada')
-ok(etiquetaClase('No elegible: Cobertura o zonificación') === 'Uso sostenible (pastoreo)', 'la clase de pastoreo se muestra en palabras de campo')
+ok(etiquetaClase('No elegible: Cobertura o zonificación') === 'Ganadería sostenible', 'la clase de la capa se muestra con el nombre del proyecto (corrección del 2026-10-27)')
+ok(etiquetaClase('Sin definir') === 'Sin definir' && etiquetaClase('No elegible: infraestructura') === 'No elegible: infraestructura', 'las clases sin proyecto se muestran tal cual')
 
 // ── 2. El tipo de proyecto no se pierde al fusionar revisiones ────────────────
-const previa = { accion: 'modificada', metodo: 'vertices', geojson: otra, area_ha: 2, proyecto: 'pastoreo' } as RevisionRecord
+const previa = { accion: 'modificada', metodo: 'vertices', geojson: otra, area_ha: 2, proyecto: 'ganaderia_sostenible' } as RevisionRecord
 let f = fusionarRevision(previa, { accion: 'confirmada', metodo: null, geojson: null, area_ha: null })
-ok(f.accion === 'modificada' && f.geojson === otra && f.proyecto === 'pastoreo', 'confirmar un sitio corregido conserva la corrección y el proyecto')
+ok(f.accion === 'modificada' && f.geojson === otra && f.proyecto === 'ganaderia_sostenible', 'confirmar un sitio corregido conserva la corrección y el proyecto')
 f = fusionarRevision(previa, { accion: 'confirmada', metodo: null, geojson: null, area_ha: null, proyecto: 'ley_arbol' })
 ok(f.proyecto === 'ley_arbol' && f.geojson === otra, 'elegir otro proyecto lo cambia sin tocar la geometría')
 
@@ -51,7 +52,7 @@ const revs: any[] = [{ local_id: 'r1', familia_local_id: 'f1', zona_id: 'z1', ac
   proyecto: 'conexion', sync_status: 'pending', created_at: '2026-10-21T10:00:00Z', updated_at: '2026-10-21T10:00:00Z' }]
 const vig = zonasVigentes(familia, revs)
 const zonas = reconciliarZonas([{ zona_id: 'z1', zona_numero: 1, area_ha_sig: 1, cobertura: { cobertura_dominante: 'Pastizal' }, suelo: {}, logistica: {}, foto_clave: 'sitio_abc' }], vig)
-ok(zonas[0].proyecto === 'conexion' && zonas[0].foto_clave === 'sitio_abc' && zonas[0].cobertura.cobertura_dominante === 'Pastizal',
+ok(zonas[0].proyecto === 'mercado_carbono' && zonas[0].foto_clave === 'sitio_abc' && zonas[0].cobertura.cobertura_dominante === 'Pastizal',
   'la evaluación refleja el proyecto del sitio sin perder lo capturado ni la clave de fotos')
 ok(claveSitio(vig[0]) === 'z1', 'la llave del sitio es su zona_id')
 
@@ -74,7 +75,7 @@ respuestas.anotar_revision_campo = () => ({ data: true, error: null })
 const a = await syncAnotacionesPendientes()
 const an = llamadas.find(l => l.fn === 'anotar_revision_campo')
 ok(a.synced === 1 && nv().anotacion_sync === 'synced', 'con la migración: el proyecto se anota en el reintento')
-ok(!!an && an.args.p_local_id === 'nv-1' && an.args.p_proyecto === 'pastoreo' && an.args.p_capa_apoyo_id === capaId,
+ok(!!an && an.args.p_local_id === 'nv-1' && an.args.p_proyecto === 'ganaderia_sostenible' && an.args.p_capa_apoyo_id === capaId,
   'viaja con su local_id, el proyecto y el área de origen')
 ok(!llamadas.some(l => l.fn === 'revisar_zona'), 'la geometría no se vuelve a mandar')
 
@@ -84,7 +85,7 @@ llamadas.length = 0
 respuestas.revisar_zona = () => ({ data: 'zona-nueva-2', error: null })
 await syncPendingRevisiones()
 const an2 = llamadas.find(l => l.fn === 'anotar_revision_campo')
-ok(!!an2 && an2.args.p_capa_apoyo_id === null && an2.args.p_proyecto === 'pastoreo', 'un área que no es de la base no viaja como origen')
+ok(!!an2 && an2.args.p_capa_apoyo_id === null && an2.args.p_proyecto === 'ganaderia_sostenible', 'un área que no es de la base no viaja como origen')
 
 // ── 6. Rechazar un área de la capa de apoyo ──────────────────────────────────
 await (db.decisionesApoyo as any).add({ local_id: 'dc-1', familia_local_id: 'f1', predio_core_id: 'p1', capa_apoyo_id: capaId, accion: 'descartada',

@@ -25,7 +25,7 @@ como `sig_primero`.
 
 **Capas de apoyo** (`geo.capas_apoyo`, RPC `geo.capas_apoyo_campo()`, una sola llamada por descarga):
 referencia en el mapa —las áreas elegibles del SHP de Lácteos del Hogar: Ley del Árbol, carbono y, desde el
-2026-10-21, «No elegible: cobertura o zonificación» (uso sostenible = pastoreo)—. Viven en la copia de
+2026-10-21, «No elegible: cobertura o zonificación» (= Ganadería sostenible, `04`)—. Viven en la copia de
 `prediosHabilitados` (no en la familia) y el módulo SIG las pinta debajo de todo, con botón para ocultarlas.
 Desde el 2026-10-21 **se tocan**: un área se usa como sitio (tal cual o ajustada; es una revisión 'nueva' con
 `capa_apoyo_id`) o se rechaza con motivo obligatorio (`DecisionApoyoRecord`, tabla Dexie `decisionesApoyo`,
@@ -126,9 +126,12 @@ Pedido del usuario. Para cualquier predio, haya o no propuesta del SIG:
 
 - **Verificar un sitio**: confirmar, corregir o **rechazar con motivo obligatorio** (queda en las
   observaciones de la revisión; el SIG lo lee en «Resultados de campo»).
-- **Tipo de proyecto por sitio** (`lib/proyectos.ts`): Ley del Árbol, Conexión o Pastoreo. Confirmar exige
-  elegirlo. Desde la capa de apoyo viene sugerido por la clase del shapefile (Ley del Arbol → Ley del Árbol,
-  Mercado voluntario de carbono → Conexión, No elegible: cobertura o zonificación → Pastoreo), pero no es una
+- **Tipo de proyecto por sitio** (`lib/proyectos.ts`): Ley del Árbol (`ley_arbol`), Mercado voluntario de
+  carbono (`mercado_carbono`) o Ganadería sostenible (`ganaderia_sostenible`) — nombres corregidos por el usuario
+  el 2026-10-27; del 21 al 27 la app guardó `conexion`/`pastoreo`, que `normalizarProyecto` y el servidor
+  (`geo.anotar_revision_campo`) traducen. Confirmar exige elegirlo. Desde la capa de apoyo viene sugerido por la
+  clase del shapefile (Ley del Arbol → Ley del Árbol, Mercado voluntario de carbono → Mercado voluntario de
+  carbono, No elegible: cobertura o zonificación → Ganadería sostenible), pero no es una
   muleta: el técnico pone el que ve. Va en `RevisionRecord.proyecto` (lo conserva `fusionarRevision`) y en
   `ZonaData.proyecto`. Al servidor viaja **aparte** de la geometría, por `geo.anotar_revision_campo`
   (`migration_sitios_proyecto.sql`): ninguna función vieja cambió de firma, y si la migración no ha corrido la

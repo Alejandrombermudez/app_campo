@@ -24,7 +24,7 @@ import { evalTable, encTable } from '../lib/supabase'
 import { refreshPrediosHabilitados, getPrediosHabilitadosCache } from '../lib/core'
 import { sigCambioRespectoA } from '../lib/actualizarSig'
 import { asegurarPracticas } from '../lib/practica'
-import { InstallBanner } from '../components/ui/InstallBanner'
+import { AppAcciones } from '../components/ui/AppAcciones'
 import { UserSetup } from '../components/ui/UserSetup'
 import { StatsTab } from './Stats'
 import { SelectorPredios, type PredioSubmissionStatus } from './Familia'
@@ -619,7 +619,7 @@ export function Home() {
         </div>
       </header>
 
-      <InstallBanner />
+      <AppAcciones />
 
       {/* Barra de sync */}
       {pendingLocal > 0 && online && (

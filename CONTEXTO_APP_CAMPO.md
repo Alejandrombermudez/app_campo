@@ -2,7 +2,7 @@
 
 > **Documento de traspaso entre sesiones.** Qué es esta app, qué se hizo, qué falta y cómo retomar.
 > Última actualización: **2026-10-21 (tarde)** — cada sitio lleva **tipo de proyecto** (Ley del Árbol,
-> Conexión, Pastoreo), rechazar pide motivo, la **caracterización biofísica se llena por sitio desde el editor
+> Mercado voluntario de carbono, Ganadería sostenible — nombres corregidos el 2026-10-27), rechazar pide motivo, la **caracterización biofísica se llena por sitio desde el editor
 > SIG** y las áreas de la capa de apoyo se usan o se rechazan (ver `CLAUDE.md` § «Sitios con tipo de proyecto…»).
 > Migración `migration_sitios_proyecto.sql` pendiente de correr.
 > Antes ese día: **campo primero** en producción: corrió `migration_campo_primero.sql`

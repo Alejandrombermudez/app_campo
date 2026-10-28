@@ -31,7 +31,8 @@ export interface RevisionRecord {
   area_ha: number | null               // calculada con turf al guardar
   observaciones: string
   zona_numero: number                  // para mostrar "Zona N" en la UI
-  // Tipo de proyecto del sitio (Ley del Árbol, Conexión, Pastoreo) y, si el sitio
+  // Tipo de proyecto del sitio (Ley del Árbol, Mercado voluntario de carbono,
+  // Ganadería sostenible; ver lib/proyectos.ts) y, si el sitio
   // salió de un área de la capa de apoyo, cuál. Viajan aparte de la geometría
   // (RPC geo.anotar_revision_campo, migration_sitios_proyecto.sql): si el servidor
   // todavía no los recibe, la revisión sube igual y esto queda 'pendiente'.

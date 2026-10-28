@@ -22,7 +22,7 @@ import {
 } from '../../lib/geo'
 import { geometriasPractica, tipoPractica } from '../../lib/practica'
 import { useOnlineStatus } from '../../lib/useOnlineStatus'
-import { PROYECTOS, nombreProyecto, proyectoSugeridoDeClase, etiquetaClase, type Proyecto } from '../../lib/proyectos'
+import { PROYECTOS, nombreProyecto, proyectoSugeridoDeClase, etiquetaClase, normalizarProyecto, type Proyecto } from '../../lib/proyectos'
 
 // ─── Estilos por estado de la zona ────────────────────────────────────────────
 // Colores del satelital: los mismos que pinta la intranet (lib/colores-campo.ts
@@ -44,8 +44,8 @@ const ESTILO_SITIO_TENUE: L.PathOptions = { color: '#f59e0b', weight: 1.5, fillO
 function colorApoyo(clase: string | null): string {
   const p = proyectoSugeridoDeClase(clase)
   if (p === 'ley_arbol') return '#fde047'   // amarillo
-  if (p === 'conexion')  return '#c4b5fd'   // lila
-  if (p === 'pastoreo')  return '#fdba74'   // durazno
+  if (p === 'mercado_carbono')      return '#c4b5fd'   // lila
+  if (p === 'ganaderia_sostenible') return '#fdba74'   // durazno
   return '#e5e7eb'
 }
 /** Qué pasó con un área de apoyo: nada todavía, se usó como sitio, o se rechazó. */
@@ -215,7 +215,7 @@ export function SigPage() {
     const clave = claveSitio(z)
     return evaluacion?.zonas.find(x => (!!z.zona_id && x.zona_id === z.zona_id) || (!!clave && x.revision_local_id === clave))
   }, [evaluacion])
-  const proyectoDe = (z: ZonaVigente): Proyecto | null => z.revision?.proyecto ?? zonaEvalDe(z)?.proyecto ?? null
+  const proyectoDe = (z: ZonaVigente): Proyecto | null => normalizarProyecto(z.revision?.proyecto ?? zonaEvalDe(z)?.proyecto)
 
   // Al cambiar de selección: el proyecto del sitio (o el sugerido por el área de
   // apoyo) y sin un rechazo a medias.
@@ -1156,12 +1156,12 @@ function listoParaCaracterizar(z: ZonaVigente): boolean {
     && (z.revision.accion === 'confirmada' || z.revision.accion === 'modificada' || z.revision.accion === 'nueva')
 }
 
-/** Ley del Árbol, Conexión o Pastoreo. */
+/** Ley del Árbol, Mercado voluntario de carbono o Ganadería sostenible (nombres largos: una columna cada uno). */
 function SelectorProyecto({ valor, onElegir }: { valor: Proyecto | null; onElegir: (p: Proyecto) => void }) {
   return (
     <div className="mb-3">
       <p className="text-xs font-semibold text-gray-700 mb-1.5">Tipo de proyecto</p>
-      <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Tipo de proyecto">
+      <div className="grid grid-cols-1 gap-1.5" role="radiogroup" aria-label="Tipo de proyecto">
         {PROYECTOS.map(p => (
           <button key={p.id} role="radio" aria-checked={valor === p.id} onClick={() => onElegir(p.id)} title={p.ayuda}
             className={`min-h-11 rounded-2xl text-[13px] font-semibold border transition-colors ${valor === p.id ? 'boton-bosque border-transparent' : 'bg-white/70 border-gray-200 text-gray-700'}`}>

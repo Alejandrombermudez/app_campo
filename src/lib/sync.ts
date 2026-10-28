@@ -3,6 +3,7 @@ import { supabase, evalTable } from './supabase'
 import type { PhotoRecord, ZonaData, EvaluacionRecord } from '../types/evaluacion'
 import { prefijoFotos, vincularZonaNueva } from '../types/evaluacion'
 import { tipoRevision, type RevisionRecord } from '../types/revision'
+import { normalizarProyecto } from './proyectos'
 import type { CultivoRow, EncuestaPredialRecord } from '../types/encuesta'
 
 function encTable()     { return supabase.schema('siembra').from('familias') }
@@ -331,7 +332,7 @@ async function anotarRevision(rev: RevisionRecord): Promise<'synced' | 'pendient
   try {
     const { data, error } = await supabase.schema('geo').rpc('anotar_revision_campo', {
       p_local_id:      rev.local_id,
-      p_proyecto:      rev.proyecto ?? null,
+      p_proyecto:      normalizarProyecto(rev.proyecto),   // los guardados con el nombre de antes también
       p_capa_apoyo_id: esUuid(rev.capa_apoyo_id) ? rev.capa_apoyo_id : null,
     })
     if (error) {

@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Download, Share, X, MoreVertical } from 'lucide-react'
 import { useInstallPrompt } from '../../lib/useInstallPrompt'
 
-export function InstallBanner() {
+/** `forzar`: se muestra aunque se haya descartado (lo pide el botón «Instalar app»). */
+export function InstallBanner({ forzar = false }: { forzar?: boolean }) {
   const { platform, canInstall, isInstalled, prompt } = useInstallPrompt()
   const [dismissed, setDismissed] = useState(
     () => localStorage.getItem('ae_install_dismissed') === '1'
@@ -14,7 +15,7 @@ export function InstallBanner() {
   }
 
   // Ya instalada o ya descartada → no mostrar nada
-  if (isInstalled || dismissed) return null
+  if (isInstalled || (dismissed && !forzar)) return null
 
   // Android con prompt nativo
   if (canInstall) {

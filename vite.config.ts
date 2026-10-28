@@ -8,19 +8,21 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'icon-192.png', 'icon-512.png', 'ref-images/**'],
+      // 'prompt': la versión nueva espera a que la persona pulse «Actualizar» (AppAcciones)
+      registerType: 'prompt',
+      includeAssets: ['icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png', 'ref-images/**'],
       manifest: {
-        name: 'Evaluación de Áreas de Siembra — AE-CAMPO-001',
-        short_name: 'AE-CAMPO',
+        name: 'Amazonía Emprende · Campo',
+        short_name: 'AE Campo',
         description: 'App offline para evaluación de áreas de restauración — Amazonía Emprende',
         theme_color: '#2f3f32',
-        background_color: '#ebe5d9',
+        background_color: '#3a382c',   // el fondo del logo: así la pantalla de arranque no es un cuadro liso
         display: 'standalone',
         start_url: '/',
         icons: [
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+          { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: 'icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
       workbox: {
