@@ -18,7 +18,7 @@ import type { EvaluacionRecord, EstadoCaracterizacion } from '../../types/evalua
 import { claveSitio, estadoCaracterizacion } from '../../types/evaluacion'
 import {
   zonasVigentes, limitesVigentes, parseGeom, areaHa, posicionRespectoZonas,
-  centroZonas, distanciaTexto, type ZonaVigente, type LimiteVigente,
+  centroZonas, distanciaTexto, distanciaPuntos, type ZonaVigente, type LimiteVigente,
 } from '../../lib/geo'
 import { geometriasPractica, tipoPractica } from '../../lib/practica'
 import { useOnlineStatus } from '../../lib/useOnlineStatus'
@@ -400,9 +400,23 @@ export function SigPage() {
   // se regeneran alrededor del GPS apenas hay predio Y GPS, llegue primero lo que
   // llegue: antes se hacía solo al recibir un fix, y si el primero llegaba antes
   // de cargar el predio y el celular estaba quieto, la práctica se quedaba lejos.
-  // Una sola vez por predio.
+  //
+  // Antes quedaba anclada para siempre con el PRIMER fix. Si ese fix era malo
+  // (ubicación aproximada por antena, a kilómetros) o la práctica se abrió en otro
+  // lugar, la persona no podía hacer el ejercicio (2026-10-29, Víctor). Ahora se
+  // vuelve a anclar mientras no se haya trabajado nada, cuando hay un GPS decente
+  // (±100 m) y la práctica queda a más de 300 m de donde la persona está.
   useEffect(() => {
-    if (!gps || !familia?.es_practica || familia.practica_anclada || anclandoRef.current) return
+    if (!gps || !familia?.es_practica || anclandoRef.current) return
+    if (familia.practica_anclada) {
+      const sinTrabajo = revisiones.length === 0 && decisiones.length === 0
+      if (!sinTrabajo || gps.accuracy > 100) return
+      const centro = centroZonas([
+        ...familia.zonas_finca.map(f => f.geojson), ...familia.zonas_sig.map(z => z.geojson),
+        ...(familia.capas_apoyo ?? []).map(c => c.geojson),
+      ])
+      if (!centro || distanciaPuntos(gps.lat, gps.lon, centro[0], centro[1]) < 300) return
+    }
     anclandoRef.current = true
     db.familias.update(familia.id!, {
       ...geometriasPractica(tipoPractica(familia), gps.lat, gps.lon),
@@ -411,8 +425,8 @@ export function SigPage() {
     }).then(() => {
       fittedRef.current = false   // el siguiente pintado encuadra la geometría nueva
       return cargar()
-    })
-  }, [gps, familia, cargar])
+    }).finally(() => { anclandoRef.current = false })
+  }, [gps, familia, revisiones, decisiones, cargar])
 
   // ─── GPS ─────────────────────────────────────────────────────────────────────
   useEffect(() => {
