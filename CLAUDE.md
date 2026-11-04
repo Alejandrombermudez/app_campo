@@ -117,6 +117,11 @@ camino a `geo.zonas` es justo la clase de bug que ya costó correcciones). Lo qu
 - Módulo SIG: dos capas («Sitios de siembra» / «Límite del predio»), dibujo sobre el satelital o **trazado
   caminando** (un vértice por «Marcar punto» con el GPS, `metodo='gps'`). `fusionarRevision` aplica igual al
   límite: confirmar no borra un límite corregido.
+  **Pausa y reanudar (2026-11-04):** el trazado caminando se puede pausar para revisar otra zona o capa y reanudar
+  donde iba. No hay seguimiento continuo de la ruta: solo los puntos que la persona marca. Los puntos se guardan a
+  cada paso en `localStorage` (`ae-trazo-gps:<predio>`, con su capa), así que el trazo sobrevive a cerrar la
+  pantalla o la app y vuelve en pausa; se borra al guardar o descartar. Los pies, el aviso de pausa y el botón de
+  abajo reanudan en vez de empezar de cero.
 - «Actualizar desde el SIG» solo bloquea el «cero zonas» si el celular tenía zonas del SIG que perder.
 - Pruebas sin red: `npm run pruebas` (rolldown + stubs de Dexie y Supabase en `scripts/`).
 

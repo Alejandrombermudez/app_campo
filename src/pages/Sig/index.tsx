@@ -6,7 +6,7 @@ import 'leaflet/dist/leaflet.css'
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css'
 import {
   ArrowLeft, Crosshair, Plus, Check, X, Pencil, Trash2, Undo2,
-  Satellite, AlertTriangle, RefreshCw, MapPin, Footprints, Fence, Sprout, Layers, ClipboardList,
+  Satellite, AlertTriangle, RefreshCw, MapPin, Footprints, Fence, Sprout, Layers, ClipboardList, Pause, Play,
 } from 'lucide-react'
 import { db } from '../../db/schema'
 import type { FamiliaRecord } from '../../types/familia'
@@ -106,6 +106,28 @@ type Capa = 'sitios' | 'limite'
 
 const tipoDeCapa = (c: Capa): TipoRevision => c === 'limite' ? 'finca' : 'restauracion'
 
+// ─── Borrador del trazado caminando ───────────────────────────────────────────
+// Los puntos marcados se guardan en el celular a cada paso: se puede pausar para
+// revisar otra zona, salir de la pantalla o perder la página sin perder el trazo.
+type PuntoGps = [number, number]   // [lon, lat]
+const claveBorrador = (predioId: string) => `ae-trazo-gps:${predioId}`
+function leerBorrador(predioId: string): { capa: Capa; puntos: PuntoGps[] } | null {
+  try {
+    const b = JSON.parse(localStorage.getItem(claveBorrador(predioId)) ?? 'null')
+    if (!b || (b.capa !== 'sitios' && b.capa !== 'limite') || !Array.isArray(b.puntos)) return null
+    const puntos = (b.puntos as unknown[]).filter((p): p is PuntoGps =>
+      Array.isArray(p) && p.length === 2 && Number.isFinite(p[0]) && Number.isFinite(p[1]))
+    return puntos.length ? { capa: b.capa, puntos } : null
+  } catch { return null }
+}
+function guardarBorrador(predioId: string | undefined, capa: Capa, puntos: PuntoGps[]) {
+  if (!predioId) return
+  try {
+    if (puntos.length) localStorage.setItem(claveBorrador(predioId), JSON.stringify({ capa, puntos }))
+    else localStorage.removeItem(claveBorrador(predioId))
+  } catch { /* sin almacenamiento: el trazo sigue en pantalla */ }
+}
+
 // ─── Página ───────────────────────────────────────────────────────────────────
 export function SigPage() {
   const { id } = useParams<{ id: string }>()   // familia local_id
@@ -116,7 +138,9 @@ export function SigPage() {
   const [revisiones, setRevisiones] = useState<RevisionRecord[]>([])
   const [loaded, setLoaded] = useState(false)
 
-  const [capa, setCapa] = useState<Capa>('sitios')
+  // Un trazo que quedó a medias (pausado, o la app se cerró) vuelve en pausa.
+  const [borrador] = useState(() => (id ? leerBorrador(id) : null))
+  const [capa, setCapa] = useState<Capa>(borrador?.capa ?? 'sitios')
   const [selNum, setSelNum] = useState<number | null>(null)     // sitio seleccionado
   const [selLim, setSelLim] = useState<number | null>(null)     // polígono de límite seleccionado
   const [modo, setModo] = useState<Modo>('ver')
@@ -124,7 +148,8 @@ export function SigPage() {
   const [gps, setGps] = useState<{ lat: number; lon: number; accuracy: number } | null>(null)
   const [gpsError, setGpsError] = useState<string | null>(null)
   const [siguiendo, setSiguiendo] = useState(true)
-  const [puntosGps, setPuntosGps] = useState<[number, number][]>([])   // [lon, lat]
+  const [puntosGps, setPuntosGps] = useState<PuntoGps[]>(borrador?.puntos ?? [])
+  const [trazoCapa, setTrazoCapa] = useState<Capa>(borrador?.capa ?? 'sitios')   // a qué capa pertenece el trazo en curso
   const [capasApoyo, setCapasApoyo] = useState<CapaApoyo[]>([])
   const [verApoyo, setVerApoyo] = useState(true)
   const [decisiones, setDecisiones] = useState<DecisionApoyoRecord[]>([])   // áreas de apoyo rechazadas aquí
@@ -385,15 +410,20 @@ export function SigPage() {
     const capaTrazo = trazoLayerRef.current
     if (!capaTrazo) return
     capaTrazo.clearLayers()
-    if (modo !== 'gps' || puntosGps.length === 0) return
+    if (puntosGps.length === 0) return   // también en pausa: el trazo se ve mientras se revisa otra zona
     const latlngs = puntosGps.map(([lon, lat]) => L.latLng(lat, lon))
-    const color = capa === 'limite' ? '#ffffff' : '#e1a644'
+    const color = trazoCapa === 'limite' ? '#ffffff' : '#e1a644'
     if (latlngs.length >= 3) L.polygon(latlngs, { color, weight: 3, fillColor: color, fillOpacity: 0.12, dashArray: '6 4', interactive: false }).addTo(capaTrazo)
     else L.polyline(latlngs, { color, weight: 3, dashArray: '6 4', interactive: false }).addTo(capaTrazo)
-    latlngs.forEach((ll, i) => L.circleMarker(ll, {
-      radius: i === 0 ? 7 : 5, color: '#1e1a18', weight: 2, fillColor: color, fillOpacity: 1, interactive: false,
-    }).addTo(capaTrazo))
-  }, [puntosGps, modo, capa])
+    // El último punto lleva un aro blanco: es donde iba, para retomar desde ahí.
+    latlngs.forEach((ll, i) => {
+      const ultimo = i === latlngs.length - 1
+      L.circleMarker(ll, {
+        radius: ultimo ? 8 : i === 0 ? 7 : 5, color: '#1e1a18', weight: ultimo ? 3 : 2,
+        fillColor: ultimo ? '#ffffff' : color, fillOpacity: 1, interactive: false,
+      }).addTo(capaTrazo)
+    })
+  }, [puntosGps, trazoCapa])
 
   // ─── Predio de práctica: anclarlo donde está la persona ─────────────────────
   // Las geometrías de ejercicio nacen en una ubicación de respaldo (Florencia) y
@@ -686,24 +716,54 @@ export function SigPage() {
   }
 
   // ─── Trazar caminando: un vértice por cada «Marcar punto» con el GPS ─────
+  // Se puede pausar (para mirar otra zona en el mapa) y reanudar donde iba: el
+  // trazo queda en el borrador del celular hasta guardarlo o descartarlo.
   function empezarGps() {
     setSelNum(null)
     setSelLim(null)
-    setPuntosGps([])
-    setSiguiendo(true)
+    if (puntosGps.length === 0) {
+      setTrazoCapa(capa)
+      setSiguiendo(true)
+    } else {
+      // Reanudar: vuelve a la capa del trazo y encuadra lo trazado con la posición actual.
+      setCapa(trazoCapa)
+      setSiguiendo(false)
+      const map = mapRef.current
+      if (map) {
+        const pts = puntosGps.map(([lon, lat]) => L.latLng(lat, lon))
+        if (gps) pts.push(L.latLng(gps.lat, gps.lon))
+        map.fitBounds(L.latLngBounds(pts).pad(0.3), { maxZoom: 19, animate: false })
+      }
+    }
     setModo('gps')
   }
   function marcarPunto() {
     if (!gps) return
-    setPuntosGps(p => [...p, [gps.lon, gps.lat]])
+    const nuevos: PuntoGps[] = [...puntosGps, [gps.lon, gps.lat]]
+    setPuntosGps(nuevos)
+    guardarBorrador(id, trazoCapa, nuevos)
   }
-  function quitarUltimoPunto() { setPuntosGps(p => p.slice(0, -1)) }
-  function cancelarGps() { setPuntosGps([]); setModo('ver') }
+  function quitarUltimoPunto() {
+    const nuevos = puntosGps.slice(0, -1)
+    setPuntosGps(nuevos)
+    guardarBorrador(id, trazoCapa, nuevos)
+  }
+  function pausarGps() {
+    setSiguiendo(false)   // que el mapa deje de perseguir al GPS mientras se revisa otra zona
+    setModo('ver')
+  }
+  function descartarGps() {
+    if (puntosGps.length >= 2 && !window.confirm(`¿Descartar el trazado de ${puntosGps.length} puntos?`)) return
+    setPuntosGps([])
+    guardarBorrador(id, trazoCapa, [])
+    setModo('ver')
+  }
   async function terminarGps() {
     if (puntosGps.length < 3) return
     const anillo = [...puntosGps, puntosGps[0]]
     const geomStr = JSON.stringify({ type: 'Polygon', coordinates: [anillo] })
     setPuntosGps([])
+    guardarBorrador(id, trazoCapa, [])
     await guardarNueva(geomStr, 'gps')
   }
 
@@ -807,9 +867,11 @@ export function SigPage() {
                 title={capa === 'limite' ? 'Dibujar el límite en el mapa' : 'Dibujar un sitio nuevo'}>
                 <Plus size={24} />
               </button>
-              <button onClick={empezarGps} disabled={!gps} className="boton-mapa vidrio text-bosque disabled:opacity-40"
-                aria-label="Trazar caminando con el GPS" title="Trazar caminando con el GPS">
-                <Footprints size={22} />
+              <button onClick={empezarGps} disabled={!gps}
+                className={`boton-mapa disabled:opacity-40 ${puntosGps.length ? 'boton-ambar' : 'vidrio text-bosque'}`}
+                aria-label={puntosGps.length ? 'Reanudar el trazado' : 'Trazar caminando con el GPS'}
+                title={puntosGps.length ? 'Reanudar el trazado' : 'Trazar caminando con el GPS'}>
+                {puntosGps.length ? <Play size={22} /> : <Footprints size={22} />}
               </button>
               {capasApoyo.length > 0 && (
                 <button onClick={() => setVerApoyo(v => !v)} aria-pressed={verApoyo}
@@ -850,6 +912,27 @@ export function SigPage() {
           </div>
         </div>
 
+        {/* Trazado en pausa: se ve el trazo mientras se revisa otra zona */}
+        {modo === 'ver' && puntosGps.length > 0 && (
+          <div className="absolute left-3 right-[4.75rem] top-[5.75rem] z-[1000] vidrio rounded-2xl px-3.5 py-2.5">
+            <p className="text-[13px] text-gray-800 flex items-start gap-1.5">
+              <Pause size={15} className="text-amber-700 shrink-0 mt-0.5" />
+              <span>
+                Trazado en pausa · <strong>{puntosGps.length} punto(s)</strong> del {trazoCapa === 'limite' ? 'límite del predio' : 'sitio'}.
+                {' '}El aro blanco es donde ibas.
+              </span>
+            </p>
+            <div className="grid grid-cols-[1fr_auto] gap-2 mt-2">
+              <button onClick={empezarGps} disabled={!gps} className="boton boton-ambar !min-h-11">
+                <Play size={16} /> Reanudar
+              </button>
+              <button onClick={descartarGps} className="boton boton-vidrio !min-h-11 !px-3.5" aria-label="Descartar el trazado">
+                <Trash2 size={16} />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Instrucción en modo dibujo */}
         {modo === 'dibujar' && (
           <div className="absolute left-3 right-3 bottom-4 z-[1000] vidrio rounded-2xl px-4 py-3 flex items-center justify-between gap-3">
@@ -864,10 +947,15 @@ export function SigPage() {
         {modo === 'gps' && (
           <div className="absolute left-3 right-3 bottom-4 z-[1000] vidrio rounded-3xl p-3.5">
             <p className="text-sm text-gray-800 mb-1">
-              Camina {capa === 'limite' ? 'el lindero del predio' : 'el borde del sitio'} y pulsa <strong>Marcar punto</strong> en cada quiebre.
+              Camina {trazoCapa === 'limite' ? 'el lindero del predio' : 'el borde del sitio'} y pulsa <strong>Marcar punto</strong> en cada quiebre.
+              {' '}Para mirar otra zona, <strong>Pausa</strong>: el trazado queda guardado.
             </p>
             <p className={`text-xs mb-3 ${precisionMala ? 'text-amber-800 font-semibold' : 'text-gray-600'}`}>
               {puntosGps.length} punto(s){gps ? ` · precisión ±${Math.round(gps.accuracy)} m` : ''}
+              {gps && puntosGps.length > 0 && (() => {
+                const [lon, lat] = puntosGps[puntosGps.length - 1]
+                return ` · a ${distanciaTexto(Math.round(distanciaPuntos(gps.lat, gps.lon, lat, lon)))} del último punto`
+              })()}
               {precisionMala && ' — espera unos segundos quieto para que mejore'}
             </p>
             <div className="grid grid-cols-[1fr_auto] gap-2">
@@ -877,10 +965,15 @@ export function SigPage() {
               <button onClick={quitarUltimoPunto} disabled={!puntosGps.length} className="boton boton-vidrio !px-3.5" aria-label="Quitar el último punto">
                 <Undo2 size={18} />
               </button>
-              <button onClick={terminarGps} disabled={puntosGps.length < 3} className="boton boton-bosque">
-                <Check size={18} /> Cerrar y guardar
-              </button>
-              <button onClick={cancelarGps} className="boton boton-vidrio !px-3.5" aria-label="Cancelar"><X size={18} /></button>
+              <div className="col-span-2 grid grid-cols-[auto_1fr_auto] gap-2">
+                <button onClick={pausarGps} disabled={!puntosGps.length} className="boton boton-vidrio">
+                  <Pause size={18} /> Pausa
+                </button>
+                <button onClick={terminarGps} disabled={puntosGps.length < 3} className="boton boton-bosque">
+                  <Check size={18} /> Cerrar y guardar
+                </button>
+                <button onClick={descartarGps} className="boton boton-vidrio !px-3.5" aria-label="Descartar el trazado"><X size={18} /></button>
+              </div>
             </div>
           </div>
         )}
@@ -988,7 +1081,7 @@ export function SigPage() {
                   texto={capasApoyo.length > 0
                     ? 'Todavía no hay sitios de siembra. Toca un área de color de la capa de apoyo para usarla, o dibuja el sitio en el mapa o trázalo caminando con el GPS.'
                     : 'Todavía no hay sitios de siembra. Dibújalos en el mapa o trázalos caminando el borde con el GPS.'}
-                  onDibujar={empezarDibujo} onGps={empezarGps} gps={!!gps} />
+                  onDibujar={empezarDibujo} onGps={empezarGps} gps={!!gps} enPausa={puntosGps.length > 0} />
               ) : (
                 <>
                   <div className="flex gap-2 flex-wrap">
@@ -1020,7 +1113,7 @@ export function SigPage() {
               limites.length === 0 ? (
                 <Vacio
                   texto="Este predio no tiene límite todavía. Recorre el lindero con el propietario y trázalo caminando con el GPS, o dibújalo sobre el satelital."
-                  onDibujar={empezarDibujo} onGps={empezarGps} gps={!!gps} />
+                  onDibujar={empezarDibujo} onGps={empezarGps} gps={!!gps} enPausa={puntosGps.length > 0} />
               ) : (
                 <>
                   <div className="flex gap-2 flex-wrap">
@@ -1231,12 +1324,14 @@ function LeyendaApoyo({ capas, estados }: { capas: CapaApoyo[]; estados: Map<str
   )
 }
 
-function Vacio({ texto, onDibujar, onGps, gps }: { texto: string; onDibujar: () => void; onGps: () => void; gps: boolean }) {
+function Vacio({ texto, onDibujar, onGps, gps, enPausa }: { texto: string; onDibujar: () => void; onGps: () => void; gps: boolean; enPausa: boolean }) {
   return (
     <div className="text-center py-1">
       <p className="text-sm text-gray-700 mb-3">{texto}</p>
       <div className="grid grid-cols-2 gap-2">
-        <button onClick={onGps} disabled={!gps} className="boton boton-ambar"><Footprints size={18} /> Caminando</button>
+        <button onClick={onGps} disabled={!gps} className="boton boton-ambar">
+          {enPausa ? <><Play size={18} /> Reanudar</> : <><Footprints size={18} /> Caminando</>}
+        </button>
         <button onClick={onDibujar} className="boton boton-vidrio"><Plus size={18} /> En el mapa</button>
       </div>
       {!gps && <p className="text-xs text-gray-500 mt-2">Trazar caminando se activa cuando haya señal de GPS.</p>}
