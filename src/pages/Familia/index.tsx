@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Search, MapPin, Loader2, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Search, MapPin, Loader2, CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-react'
 import { db } from '../../db/schema'
 import { newFamiliaDesdeHabilitado } from '../../types/familia'
 import type { FamiliaRecord } from '../../types/familia'
 import type { PredioHabilitado } from '../../types/core'
-import { refreshPrediosHabilitados, getPrediosHabilitadosCache } from '../../lib/core'
+import { refreshPrediosHabilitados, getPrediosHabilitadosCache, getEstadoDescarga, type EstadoDescarga } from '../../lib/core'
 import { useOnlineStatus } from '../../lib/useOnlineStatus'
 import { ActualizarSigCard } from '../../components/ui/ActualizarSig'
 
@@ -87,6 +87,10 @@ const ETAPA: Record<string, string> = {
   juridica: 'En jurídica', sig_i: 'SIG I', campo: 'En campo', sig_ii: 'SIG II',
 }
 
+// Fuente del predio (catalogo.fuentes_informacion). Lácteos del Hogar va con
+// filtro propio: es el aliado que trajo la mayoría de los predios de campo.
+const FUENTE_LDH = 'lacteos_del_hogar'
+
 // ─── Modo "nueva": selector de predios (todos los que jurídica tiene activos) ─
 export function SelectorPredios({
   statusByPredio, embedded = false,
@@ -102,6 +106,9 @@ export function SelectorPredios({
   const [query, setQuery]       = useState('')
   const [opening, setOpening]   = useState<string | null>(null)
   const [error, setError]       = useState<string | null>(null)
+  const [soloLdh, setSoloLdh]   = useState(false)
+  const [estado, setEstado]     = useState<EstadoDescarga | null>(getEstadoDescarga)
+  const [intento, setIntento]   = useState(0)   // «Reintentar» vuelve a descargar
 
   useEffect(() => {
     let cancelled = false
@@ -111,24 +118,30 @@ export function SelectorPredios({
       if (!cancelled) setPredios(cached)
       if (online) {
         const fresh = await refreshPrediosHabilitados()
-        if (!cancelled) setPredios(fresh)
+        if (!cancelled) { setPredios(fresh); setEstado(getEstadoDescarga()) }
       }
       if (!cancelled) setLoading(false)
     }
     load()
     return () => { cancelled = true }
-  }, [online])
+  }, [online, intento])
+
+  const nLdh = useMemo(() => predios.filter(p => p.fuente_informacion === FUENTE_LDH).length, [predios])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return predios
+    // Si la descarga nueva ya no trae la fuente, el filtro (que desaparece) deja de aplicar.
+    const base = soloLdh && nLdh > 0 ? predios.filter(p => p.fuente_informacion === FUENTE_LDH) : predios
+    if (!q) return base
     // La vista puede traer vereda, municipio o propietario vacíos (NULL): sin el
     // `?? ''` escribir en el buscador tumbaba la lista.
-    return predios.filter(p =>
+    return base.filter(p =>
       [p.nombre_predio, p.nombre_propietario, p.municipio, p.vereda]
         .some(c => (c ?? '').toLowerCase().includes(q))
     )
-  }, [predios, query])
+  }, [predios, query, soloLdh, nLdh])
+
+  const incompleta = !!estado && estado.resultado !== 'completa' && online
 
   async function handleSelect(p: PredioHabilitado) {
     if (opening) return
@@ -184,6 +197,40 @@ export function SelectorPredios({
             className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-bosque"
           />
         </div>
+        <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+          {nLdh > 0 && (
+            <div className="grid grid-cols-2 gap-1 p-1 rounded-full bg-gray-200/80 text-[13px]" role="tablist">
+              <button role="tab" aria-selected={!soloLdh} onClick={() => setSoloLdh(false)}
+                className={`min-h-9 px-3 rounded-full font-semibold ${!soloLdh ? 'boton-bosque' : 'text-gray-700'}`}>
+                Todos
+              </button>
+              <button role="tab" aria-selected={soloLdh} onClick={() => setSoloLdh(true)}
+                className={`min-h-9 px-3 rounded-full font-semibold whitespace-nowrap ${soloLdh ? 'boton-bosque' : 'text-gray-700'}`}>
+                Lácteos del Hogar
+              </button>
+            </div>
+          )}
+          <p className="text-xs text-gray-600">
+            {filtered.length} predio(s)
+            {estado?.resultado === 'completa' && !soloLdh && !query && ` de ${estado.en_servidor}`}
+            {loading && predios.length > 0 && ' · actualizando…'}
+          </p>
+        </div>
+        {incompleta && !loading && (
+          <div className="mt-2.5 rounded-xl px-3.5 py-2.5 text-[13px] bg-amber-50 text-amber-900 border border-amber-200 flex items-start gap-2">
+            <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+            <span className="flex-1">
+              {estado!.resultado === 'fallida'
+                ? 'No se pudo descargar la lista: es la copia que ya tenía el celular.'
+                : <>La señal falló con algunos predios
+                    {estado!.sin_bajar > 0 && <>: <strong>{estado!.sin_bajar} no se pudieron bajar</strong></>}
+                    {estado!.con_copia_anterior > 0 && <>{estado!.sin_bajar > 0 ? ' y' : ':'} {estado!.con_copia_anterior} quedaron con la copia anterior</>}.</>}
+            </span>
+            <button onClick={() => setIntento(n => n + 1)} className="boton boton-vidrio !min-h-9 !px-3 shrink-0">
+              <RefreshCw size={14} /> Reintentar
+            </button>
+          </div>
+        )}
       </div>
 
       <main className={`flex-1 px-4 pb-10 space-y-2 ${embedded ? '' : 'overflow-y-auto'}`}>
@@ -224,6 +271,11 @@ export function SelectorPredios({
                     ) : (
                       <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
                         {p.zonas.length} sitio(s) propuestos por el SIG
+                      </span>
+                    )}
+                    {p.fuente_informacion === FUENTE_LDH && !soloLdh && (
+                      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                        Lácteos del Hogar
                       </span>
                     )}
                     {(p.capas_apoyo?.length ?? 0) > 0 && (

@@ -13,6 +13,12 @@ class Tabla {
   filter(pred: (f: Fila) => boolean) {
     return { toArray: () => Promise.resolve(this.filas.filter(pred).map(f => ({ ...f }))) }
   }
+  clear() { this.filas = []; return Promise.resolve() }
+  bulkAdd(fs: Fila[]) { for (const f of fs) this.add(f); return Promise.resolve() }
+  get(clave: unknown) { return Promise.resolve(this.filas.find(f => f.predio_id === clave || f.id === clave)) }
+  orderBy(campo: string) {
+    return { toArray: () => Promise.resolve([...this.filas].sort((a, b) => String(a[campo]).localeCompare(String(b[campo]))).map(f => ({ ...f }))) }
+  }
   delete(id: number) { this.filas = this.filas.filter(f => f.id !== id); return Promise.resolve() }
   where(campo: string) {
     const sobre = (pred: (f: Fila) => boolean) => ({
@@ -29,4 +35,5 @@ export const db = {
   familias: new Tabla(), evaluaciones: new Tabla(), revisiones: new Tabla(),
   encuestas: new Tabla(), photos: new Tabla(), predios: new Tabla(), prediosHabilitados: new Tabla(),
   decisionesApoyo: new Tabla(),
+  transaction: (_modo: string, _t: unknown, fn: () => Promise<unknown>) => fn(),
 }

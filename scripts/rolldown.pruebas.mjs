@@ -9,7 +9,7 @@ const stubs = {
   [path.join(aqui, '..', 'src', 'lib', 'supabase.ts')]: path.join(aqui, 'stubs', 'supabase.ts'),
 }
 export default {
-  input: { 'prueba-campo-primero': path.join(aqui, 'prueba-campo-primero.ts'), 'prueba-sync-limite': path.join(aqui, 'prueba-sync-limite.ts'), 'prueba-sitios-proyecto': path.join(aqui, 'prueba-sitios-proyecto.ts') },
+  input: { 'prueba-campo-primero': path.join(aqui, 'prueba-campo-primero.ts'), 'prueba-sync-limite': path.join(aqui, 'prueba-sync-limite.ts'), 'prueba-sitios-proyecto': path.join(aqui, 'prueba-sitios-proyecto.ts'), 'prueba-trazo-descarga': path.join(aqui, 'prueba-trazo-descarga.ts') },
   platform: 'node',
   output: { dir: salida, format: 'esm' },
   plugins: [{

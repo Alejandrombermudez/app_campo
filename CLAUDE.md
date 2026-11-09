@@ -118,10 +118,23 @@ camino a `geo.zonas` es justo la clase de bug que ya costó correcciones). Lo qu
   caminando** (un vértice por «Marcar punto» con el GPS, `metodo='gps'`). `fusionarRevision` aplica igual al
   límite: confirmar no borra un límite corregido.
   **Pausa y reanudar (2026-11-04):** el trazado caminando se puede pausar para revisar otra zona o capa y reanudar
-  donde iba. No hay seguimiento continuo de la ruta: solo los puntos que la persona marca. Los puntos se guardan a
+  donde iba. Los puntos se guardan a
   cada paso en `localStorage` (`ae-trazo-gps:<predio>`, con su capa), así que el trazo sobrevive a cerrar la
   pantalla o la app y vuelve en pausa; se borra al guardar o descartar. Los pies, el aviso de pausa y el botón de
   abajo reanudan en vez de empezar de cero.
+  **Recorrido que se graba solo (2026-11-09, reporte de campo «no marca bien el track»):** antes solo quedaban los
+  puntos pulsados, con la lectura que hubiera (de antena a ±100 m o de hace 5 s), y con la pantalla apagada el
+  navegador dejaba de recibir GPS. Ahora, con «Grabar el recorrido al caminar» (por defecto; preferencia del celular
+  en `ae-trazo-auto`), cada lectura entra si pasa los filtros de `lib/trazo.ts`: precisión ≤ 20 m, a más de
+  max(4 m, precisión/2) del último punto y sin saltos de más de 8 m/s (al reanudar no se mide la velocidad).
+  «Marcar punto» sigue para esquinas exactas: rechaza lecturas de más de 15 s y pregunta si la precisión pasa de 30 m.
+  Mientras se traza, la pantalla queda encendida (Wake Lock). Prueba: `scripts/prueba-trazo-descarga.ts`.
+- **Lista de predios sin caerse por uno (2026-11-09):** cada predio reintenta sus zonas 2 veces; si aun así falla,
+  queda con su copia anterior (nunca con zonas vacías) o no entra, y `getEstadoDescarga()` lo dice: la lista muestra
+  «N predio(s) de M» y un aviso con «Reintentar». Antes un solo predio fallido dejaba toda la copia vieja en silencio.
+  Las capas de apoyo que fallen tampoco tumban la descarga. **Filtro «Lácteos del Hogar»**: la vista trae
+  `fuente_informacion` desde `migration_vista_campo_fuente.sql` (en `../Intranet-AE/docs/sql/`, **pendiente de
+  correr** al 2026-11-09); sin ella la app pide sin la columna (un 400 en consola, esperado) y el filtro no aparece.
 - «Actualizar desde el SIG» solo bloquea el «cero zonas» si el celular tenía zonas del SIG que perder.
 - Pruebas sin red: `npm run pruebas` (rolldown + stubs de Dexie y Supabase en `scripts/`).
 

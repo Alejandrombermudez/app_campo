@@ -130,11 +130,15 @@ async function leerPrediosCampo(predioId?: string) {
     const q = prediosCampoTable().select(cols)
     return predioId ? q.eq('predio_id', predioId) : q.order('nombre_predio', { ascending: true })
   }
-  const r = await consulta(`${COLUMNAS_PREDIO}, flujo_campo`)
-  if (r.error && (r.error.code === '42703' || /flujo_campo/.test(r.error.message ?? ''))) {
-    return consulta(COLUMNAS_PREDIO)
-  }
-  return r
+  // De la más nueva a la más vieja: fuente_informacion llegó con
+  // migration_vista_campo_fuente.sql (2026-11-09), flujo_campo con campo primero.
+  const falta = (r: { error: { code?: string; message?: string } | null }, col: string) =>
+    !!r.error && (r.error.code === '42703' || new RegExp(col).test(r.error.message ?? ''))
+  const r = await consulta(`${COLUMNAS_PREDIO}, flujo_campo, fuente_informacion`)
+  if (!falta(r, 'fuente_informacion|flujo_campo')) return r
+  const r2 = await consulta(`${COLUMNAS_PREDIO}, flujo_campo`)
+  if (!falta(r2, 'flujo_campo')) return r2
+  return consulta(COLUMNAS_PREDIO)
 }
 
 // Con decenas de predios (Elegibilidad LDH, 2026-10-20) bajar las zonas de uno
@@ -143,8 +147,27 @@ async function leerPrediosCampo(predioId?: string) {
 // descarga reciente se reutiliza en vez de repetirse.
 const ZONAS_EN_PARALELO = 6
 const REUTILIZAR_MS = 60_000
+const REINTENTOS_ZONAS = 2
 let descargaEnCurso: Promise<PredioHabilitado[]> | null = null
 let ultimaDescargaOk = 0
+
+/**
+ * Cómo salió la última descarga de la lista. Antes, si fallaba un solo predio
+ * entre 140 (señal mala), la app se quedaba EN SILENCIO con la copia vieja y
+ * la persona veía menos predios de los que hay (2026-10-27 y 2026-11-09).
+ */
+export interface EstadoDescarga {
+  /** 'completa' | 'parcial': algunos predios quedaron con su copia anterior o sin bajar | 'fallida': quedó la copia anterior entera */
+  resultado:   'completa' | 'parcial' | 'fallida'
+  /** Predios que no se pudieron bajar y tampoco estaban en el celular. */
+  sin_bajar:   number
+  /** Predios que no se pudieron renovar y quedaron con la copia anterior. */
+  con_copia_anterior: number
+  en_servidor: number
+  at:          string
+}
+let estadoDescarga: EstadoDescarga | null = null
+export function getEstadoDescarga(): EstadoDescarga | null { return estadoDescarga }
 
 /** Descarga los predios habilitados + sus zonas SIG (con geometría) y los deja en caché (Dexie) para uso offline. */
 export function refreshPrediosHabilitados(): Promise<PredioHabilitado[]> {
@@ -160,48 +183,74 @@ async function descargarPrediosHabilitados(): Promise<PredioHabilitado[]> {
 
   if (error || !data) {
     console.error('[core] refreshPrediosHabilitados error:', error?.message)
-    return getPrediosHabilitadosCache()
+    const copia = await getPrediosHabilitadosCache()
+    estadoDescarga = { resultado: 'fallida', sin_bajar: 0, con_copia_anterior: copia.length, en_servidor: 0, at: new Date().toISOString() }
+    return copia
   }
 
   const cachedAt = new Date().toISOString()
   const filas = data as unknown as PredioCampoRow[]
   const resultado: (PredioHabilitado | null)[] = new Array(filas.length).fill(null)
-  try {
-    // Las capas de apoyo llegan todas en una sola llamada (son referencia, no
-    // sitios). Si la descarga falla, se aborta igual que con las zonas: la
-    // copia anterior queda intacta en vez de quedarse sin la guía.
-    const capas = await fetchCapasApoyo()
-    // Un error en cualquier predio rechaza todo (Promise.all): mismo efecto que
-    // antes con el bucle, la caché anterior queda intacta.
-    let siguiente = 0
-    const trabajador = async () => {
-      while (siguiente < filas.length) {
-        const i = siguiente++
-        const p = filas[i]
-        const { siembra, finca } = await fetchZonasPredio(p.predio_id)
-        // SIG I es obligatorio en el flujo de siempre: la vista ya lo exige
-        // (EXISTS geo.zonas), pero se repite aquí como cinturón de seguridad —
-        // nunca ofrecer un predio sin zonas reales, aunque la vista quede
-        // desactualizada o falle el filtro. La única excepción es un predio
-        // enviado como «campo primero»: ahí las zonas las dibuja el terreno.
-        if (siembra.length === 0 && p.flujo_campo !== 'campo_primero') continue
-        resultado[i] = { ...p, cached_at: cachedAt, zonas: siembra, zonas_finca: finca, capas_apoyo: capas.get(p.predio_id) ?? [] }
-      }
-    }
-    await Promise.all(Array.from({ length: Math.min(ZONAS_EN_PARALELO, filas.length) }, trabajador))
-  } catch (err) {
-    // Si la señal se cae a mitad de la descarga, la lista quedaría incompleta.
-    // Vale más conservar la caché anterior intacta que borrar predios que sí
-    // existen (el clear() de abajo es destructivo).
-    console.error('[core] refreshPrediosHabilitados zonas error:', err)
-    return getPrediosHabilitadosCache()
+  // Copia anterior de cada predio: si su descarga falla, se queda con esa en vez
+  // de desaparecer de la lista o de tumbar la descarga de todos los demás.
+  const anterior = new Map((await getPrediosHabilitadosCache()).map(p => [p.predio_id, p]))
+  let sinBajar = 0
+  let conCopia = 0
+
+  // Las capas de apoyo llegan todas en una sola llamada (son referencia, no
+  // sitios). Si fallan, cada predio conserva las que ya tenía.
+  let capas: Map<string, CapaApoyo[]> | null = null
+  try { capas = await fetchCapasApoyo() } catch (err) {
+    console.error('[core] refreshPrediosHabilitados capas error:', err)
   }
+
+  let siguiente = 0
+  const trabajador = async () => {
+    while (siguiente < filas.length) {
+      const i = siguiente++
+      const p = filas[i]
+      const viejo = anterior.get(p.predio_id)
+      let zonas: { siembra: ZonaSig[]; finca: ZonaFinca[] } | null = null
+      for (let intento = 0; intento <= REINTENTOS_ZONAS && !zonas; intento++) {
+        try { zonas = await fetchZonasPredio(p.predio_id) } catch (err) {
+          if (intento === REINTENTOS_ZONAS) console.error('[core] zonas de', p.predio_id, err)
+        }
+      }
+      const capasPredio = capas ? (capas.get(p.predio_id) ?? []) : (viejo?.capas_apoyo ?? [])
+      if (!zonas) {
+        // Nunca se guarda un predio con zonas vacías por un fallo de red (ver
+        // fetchZonasPredio): o queda su copia anterior, con la identidad nueva,
+        // o no entra en esta vuelta.
+        if (viejo) { conCopia++; resultado[i] = { ...viejo, ...p, capas_apoyo: capasPredio } }
+        else sinBajar++
+        continue
+      }
+      // SIG I es obligatorio en el flujo de siempre: la vista ya lo exige
+      // (EXISTS geo.zonas), pero se repite aquí como cinturón de seguridad —
+      // nunca ofrecer un predio sin zonas reales, aunque la vista quede
+      // desactualizada o falle el filtro. La única excepción es un predio
+      // enviado como «campo primero»: ahí las zonas las dibuja el terreno.
+      if (zonas.siembra.length === 0 && p.flujo_campo !== 'campo_primero') continue
+      resultado[i] = { ...p, cached_at: cachedAt, zonas: zonas.siembra, zonas_finca: zonas.finca, capas_apoyo: capasPredio }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(ZONAS_EN_PARALELO, filas.length) }, trabajador))
 
   // El orden de la vista (por nombre) se conserva aunque las zonas lleguen en desorden.
   const withZonas = resultado.filter((p): p is PredioHabilitado => p !== null)
-  await db.prediosHabilitados.clear()
-  if (withZonas.length) await db.prediosHabilitados.bulkAdd(withZonas)
-  ultimaDescargaOk = Date.now()
+  // Si no bajó nada nuevo (señal perdida desde el principio), no se toca la copia.
+  if (withZonas.length === 0 && anterior.size > 0) {
+    estadoDescarga = { resultado: 'fallida', sin_bajar: sinBajar, con_copia_anterior: anterior.size, en_servidor: filas.length, at: cachedAt }
+    return getPrediosHabilitadosCache()
+  }
+  await db.transaction('rw', db.prediosHabilitados, async () => {
+    await db.prediosHabilitados.clear()
+    if (withZonas.length) await db.prediosHabilitados.bulkAdd(withZonas)
+  })
+  const completa = sinBajar === 0 && conCopia === 0 && capas !== null
+  estadoDescarga = { resultado: completa ? 'completa' : 'parcial', sin_bajar: sinBajar, con_copia_anterior: conCopia, en_servidor: filas.length, at: cachedAt }
+  // Una descarga incompleta no se reutiliza: la próxima apertura reintenta.
+  if (completa) ultimaDescargaOk = Date.now()
   return withZonas
 }
 

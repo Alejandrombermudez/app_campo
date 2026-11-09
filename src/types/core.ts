@@ -65,6 +65,9 @@ export interface PredioHabilitado {
   etapa:                  string
   /** Ausente si la BD todavía no tiene migration_campo_primero.sql: se trata como sig_primero. */
   flujo_campo?:           FlujoCampo
+  /** Cómo llegó el predio (catalogo.fuentes_informacion), p. ej. 'lacteos_del_hogar'.
+   *  Ausente si la BD no tiene migration_vista_campo_fuente.sql. */
+  fuente_informacion?:    string | null
   cached_at:              string
   zonas:                  ZonaSig[]     // tipo='restauracion', sin descartadas
   zonas_finca:            ZonaFinca[]   // tipo='finca' (contexto del mapa)

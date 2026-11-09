@@ -22,6 +22,7 @@ import {
 } from '../../lib/geo'
 import { geometriasPractica, tipoPractica } from '../../lib/practica'
 import { useOnlineStatus } from '../../lib/useOnlineStatus'
+import { evaluarLectura, lecturaVieja, PRECISION_MANUAL_M, PRECISION_AUTO_M, type LecturaGps, type MotivoDescarte } from '../../lib/trazo'
 import { PROYECTOS, nombreProyecto, proyectoSugeridoDeClase, etiquetaClase, normalizarProyecto, type Proyecto } from '../../lib/proyectos'
 
 // ─── Estilos por estado de la zona ────────────────────────────────────────────
@@ -128,6 +129,13 @@ function guardarBorrador(predioId: string | undefined, capa: Capa, puntos: Punto
   } catch { /* sin almacenamiento: el trazo sigue en pantalla */ }
 }
 
+// Grabar el recorrido solo al caminar (por defecto) o solo con «Marcar punto».
+// Es una preferencia del celular, no del predio.
+const CLAVE_AUTO = 'ae-trazo-auto'
+function leerAuto(): boolean {
+  try { return localStorage.getItem(CLAVE_AUTO) !== 'no' } catch { return true }
+}
+
 // ─── Página ───────────────────────────────────────────────────────────────────
 export function SigPage() {
   const { id } = useParams<{ id: string }>()   // familia local_id
@@ -145,11 +153,13 @@ export function SigPage() {
   const [selLim, setSelLim] = useState<number | null>(null)     // polígono de límite seleccionado
   const [modo, setModo] = useState<Modo>('ver')
   const [obs, setObs] = useState('')
-  const [gps, setGps] = useState<{ lat: number; lon: number; accuracy: number } | null>(null)
+  const [gps, setGps] = useState<LecturaGps | null>(null)
   const [gpsError, setGpsError] = useState<string | null>(null)
   const [siguiendo, setSiguiendo] = useState(true)
   const [puntosGps, setPuntosGps] = useState<PuntoGps[]>(borrador?.puntos ?? [])
   const [trazoCapa, setTrazoCapa] = useState<Capa>(borrador?.capa ?? 'sitios')   // a qué capa pertenece el trazo en curso
+  const [autoTrazo, setAutoTrazo] = useState(leerAuto)                         // grabar al caminar
+  const [descarte, setDescarte] = useState<MotivoDescarte>(null)               // por qué no entró la última lectura
   const [capasApoyo, setCapasApoyo] = useState<CapaApoyo[]>([])
   const [verApoyo, setVerApoyo] = useState(true)
   const [decisiones, setDecisiones] = useState<DecisionApoyoRecord[]>([])   // áreas de apoyo rechazadas aquí
@@ -175,6 +185,7 @@ export function SigPage() {
   const siguiendoRef = useRef(true)
   const modoRef = useRef<Modo>('ver')
   const capaRef = useRef<Capa>('sitios')
+  const horaUltimoPuntoRef = useRef<number | null>(null)   // hora del último punto (para detectar saltos del GPS)
   const anclandoRef = useRef(false)   // la práctica se ancla al GPS una sola vez
   // Qué se está editando: un sitio/límite existente, o un área de apoyo que se va a usar como sitio
   const editandoApoyoRef = useRef<CapaApoyo | null>(null)
@@ -464,7 +475,7 @@ export function SigPage() {
     const watchId = navigator.geolocation.watchPosition(
       pos => {
         setGpsError(null)
-        const p = { lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy }
+        const p: LecturaGps = { lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy, t: pos.timestamp || Date.now() }
         setGps(p)
 
         const map = mapRef.current
@@ -483,10 +494,55 @@ export function SigPage() {
       err => setGpsError(err.code === err.PERMISSION_DENIED
         ? 'Permiso de ubicación denegado — actívalo para geolocalizarte en las zonas'
         : 'Sin señal de GPS todavía…'),
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
+      { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 },
     )
     return () => navigator.geolocation.clearWatch(watchId)
   }, [])
+
+  // ─── Grabación automática del recorrido ──────────────────────────────────────
+  // Mientras se traza, cada lectura buena del GPS que esté a unos metros del
+  // último punto se vuelve un punto. Las de precisión mala, las que no se movieron
+  // y los saltos (más rápido que caminando) se descartan.
+  useEffect(() => {
+    if (modo !== 'gps' || !autoTrazo || !gps) return
+    const ult = puntosGps[puntosGps.length - 1]
+    const motivo = evaluarLectura(ult ? { lon: ult[0], lat: ult[1], t: horaUltimoPuntoRef.current } : null, gps)
+    setDescarte(motivo)
+    if (motivo) return
+    const nuevos: PuntoGps[] = [...puntosGps, [gps.lon, gps.lat]]
+    horaUltimoPuntoRef.current = gps.t
+    setPuntosGps(nuevos)
+    guardarBorrador(id, trazoCapa, nuevos)
+    // Solo depende de la lectura nueva: los puntos se leen del render actual.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gps, modo, autoTrazo])
+
+  // Con la pantalla apagada el navegador deja de recibir el GPS y el recorrido
+  // sale con líneas rectas. Mientras se traza, la pantalla queda encendida.
+  useEffect(() => {
+    if (modo !== 'gps' || !('wakeLock' in navigator)) return
+    let lock: WakeLockSentinel | null = null
+    let activo = true
+    const pedir = () => {
+      if (!activo || document.visibilityState !== 'visible') return
+      navigator.wakeLock.request('screen').then(l => {
+        if (activo) lock = l; else l.release().catch(() => {})
+      }).catch(() => { /* sin permiso o batería baja: se sigue sin él */ })
+    }
+    pedir()
+    document.addEventListener('visibilitychange', pedir)
+    return () => {
+      activo = false
+      document.removeEventListener('visibilitychange', pedir)
+      lock?.release().catch(() => {})
+    }
+  }, [modo])
+
+  function cambiarAuto(v: boolean) {
+    setAutoTrazo(v)
+    setDescarte(null)
+    try { localStorage.setItem(CLAVE_AUTO, v ? 'si' : 'no') } catch { /* preferencia solo en pantalla */ }
+  }
 
   function centrarEnMi() {
     setSiguiendo(true)
@@ -721,11 +777,14 @@ export function SigPage() {
   function empezarGps() {
     setSelNum(null)
     setSelLim(null)
+    setDescarte(null)
     if (puntosGps.length === 0) {
+      horaUltimoPuntoRef.current = null
       setTrazoCapa(capa)
       setSiguiendo(true)
     } else {
       // Reanudar: vuelve a la capa del trazo y encuadra lo trazado con la posición actual.
+      horaUltimoPuntoRef.current = null
       setCapa(trazoCapa)
       setSiguiendo(false)
       const map = mapRef.current
@@ -739,11 +798,19 @@ export function SigPage() {
   }
   function marcarPunto() {
     if (!gps) return
+    if (lecturaVieja(gps)) {
+      window.alert('El GPS no ha dado una posición nueva en los últimos segundos. Espera a que se actualice y vuelve a marcar.')
+      return
+    }
+    if (gps.accuracy > PRECISION_MANUAL_M &&
+        !window.confirm(`La precisión ahora es de ±${Math.round(gps.accuracy)} m: el punto puede quedar corrido. ¿Marcarlo de todos modos?`)) return
+    horaUltimoPuntoRef.current = gps.t
     const nuevos: PuntoGps[] = [...puntosGps, [gps.lon, gps.lat]]
     setPuntosGps(nuevos)
     guardarBorrador(id, trazoCapa, nuevos)
   }
   function quitarUltimoPunto() {
+    horaUltimoPuntoRef.current = null
     const nuevos = puntosGps.slice(0, -1)
     setPuntosGps(nuevos)
     guardarBorrador(id, trazoCapa, nuevos)
@@ -947,9 +1014,15 @@ export function SigPage() {
         {modo === 'gps' && (
           <div className="absolute left-3 right-3 bottom-4 z-[1000] vidrio rounded-3xl p-3.5">
             <p className="text-sm text-gray-800 mb-1">
-              Camina {trazoCapa === 'limite' ? 'el lindero del predio' : 'el borde del sitio'} y pulsa <strong>Marcar punto</strong> en cada quiebre.
+              {autoTrazo
+                ? <>Camina {trazoCapa === 'limite' ? 'el lindero del predio' : 'el borde del sitio'}: el recorrido se graba solo. <strong>Marcar punto</strong> agrega una esquina exacta.</>
+                : <>Camina {trazoCapa === 'limite' ? 'el lindero del predio' : 'el borde del sitio'} y pulsa <strong>Marcar punto</strong> en cada quiebre.</>}
               {' '}Para mirar otra zona, <strong>Pausa</strong>: el trazado queda guardado.
             </p>
+            <label className="flex items-center gap-2 text-[13px] text-gray-800 mb-1.5">
+              <input type="checkbox" checked={autoTrazo} onChange={e => cambiarAuto(e.target.checked)} className="h-5 w-5 accent-bosque" />
+              Grabar el recorrido al caminar
+            </label>
             <p className={`text-xs mb-3 ${precisionMala ? 'text-amber-800 font-semibold' : 'text-gray-600'}`}>
               {puntosGps.length} punto(s){gps ? ` · precisión ±${Math.round(gps.accuracy)} m` : ''}
               {gps && puntosGps.length > 0 && (() => {
@@ -957,6 +1030,8 @@ export function SigPage() {
                 return ` · a ${distanciaTexto(Math.round(distanciaPuntos(gps.lat, gps.lon, lat, lon)))} del último punto`
               })()}
               {precisionMala && ' — espera unos segundos quieto para que mejore'}
+              {autoTrazo && descarte === 'precision' && ` · no se graba con más de ±${PRECISION_AUTO_M} m`}
+              {autoTrazo && descarte === 'salto' && ' — se ignoró un salto del GPS'}
             </p>
             <div className="grid grid-cols-[1fr_auto] gap-2">
               <button onClick={marcarPunto} disabled={!gps} className="boton boton-ambar text-base">
