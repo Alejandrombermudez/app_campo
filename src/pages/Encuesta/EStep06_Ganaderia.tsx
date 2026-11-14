@@ -137,6 +137,13 @@ export function EStep06({ data, onChange }: Props) {
         </Field>
       </Section>
 
+      <Section title="Inversión de WWF">
+        <Field label="Inversión realizada por WWF en el predio">
+          <ChkGroup opts={['Cercado', 'Acueducto ganadero', 'Banco de proteína', 'Ninguno']} val={data.inversion_wwf ?? []}
+            onChange={v => s('inversion_wwf', v)} cols={2} exclusiva="Ninguno" />
+        </Field>
+      </Section>
+
       <Section title="Prácticas de ganadería regenerativa">
         <div className="space-y-2">
           {([

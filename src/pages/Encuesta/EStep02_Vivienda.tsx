@@ -11,21 +11,24 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return <div className="space-y-4"><h3 className="text-xs font-bold uppercase tracking-widest text-bosque border-b border-bosque/20 pb-1">{title}</h3>{children}</div>
 }
 
+// Techo, paredes y piso en una sola pregunta (2026-11-13): lo que se quiere
+// saber es el tipo de vivienda, no el inventario de materiales.
+const ESTRUCTURAS = [
+  'Material: bloque o ladrillo, piso de cemento o baldosa',
+  'Madera: paredes y piso de madera',
+  'Mixta: parte en material, parte en madera',
+  'Precaria: tabla, plástico o bahareque, piso de tierra',
+]
+
 export function EStep02({ data, onChange }: Props) {
   const s = (k: keyof EncuestaVivienda, v: unknown) => onChange({ ...data, [k]: v })
   return (
     <div className="space-y-6">
       <h2 className="text-base font-semibold text-bosque">§3 Característica de la Vivienda</h2>
 
-      <Section title="Materiales de construcción">
-        <Field label="Techo">
-          <RadioGrp opts={['Zinc','Madera','Paja','Eternit','Otro']} val={data.material_techo ?? ''} onChange={v => s('material_techo', v)} cols={3} />
-        </Field>
-        <Field label="Paredes">
-          <RadioGrp opts={['Bahareque','Guadua','Madera','Ladrillo / Bloque','Otro']} val={data.material_paredes ?? ''} onChange={v => s('material_paredes', v)} cols={2} />
-        </Field>
-        <Field label="Piso">
-          <RadioGrp opts={['Tierra','Cemento','Baldosa','Madera','Otro']} val={data.material_piso ?? ''} onChange={v => s('material_piso', v)} cols={3} />
+      <Section title="Estructura">
+        <Field label="¿Cómo está construida la vivienda?">
+          <RadioGrp opts={ESTRUCTURAS} val={data.estructura_vivienda ?? ''} onChange={v => s('estructura_vivienda', v)} cols={1} />
         </Field>
       </Section>
 

@@ -10,7 +10,7 @@ export interface EncuestaGeneral {
   encuestador: string
   tipo_encuestado: string          // Propietario/Arrendatario/Mayordomo/Trabajador
   estrato_paisaje: string          // Sabana/Vega/Tierra firme alta/media/baja
-  altitud_msnm: number | null
+  altitud_msnm?: number | null     // ya no se pregunta (2026-11-13): sale del modelo de elevación
   anio_adquisicion: number | null  // se mantiene en Campo: Jurídica aún no lo captura estructurado
   distancia_cabecera_km: number | null
   tipo_via: string[]               // multi
@@ -22,9 +22,11 @@ export interface EncuestaGeneral {
 
 // ─── §3 Vivienda ──────────────────────────────────────────────────────────────
 export interface EncuestaVivienda {
-  material_techo: string
-  material_paredes: string
-  material_piso: string
+  // Techo, paredes y piso se unificaron en una sola pregunta (2026-11-13).
+  estructura_vivienda?: string
+  material_techo?: string
+  material_paredes?: string
+  material_piso?: string
   num_habitaciones: number | null
   personas_vivienda: number | null
   tipo_cocina: string[]
@@ -69,8 +71,17 @@ export interface EncuestaEconomia {
   medio_transporte_produccion: string
   transporte_propio: string        // Propio/Rentado
   valor_transporte: number | null
-  problemas_mercado: string
-  nivel_ingresos: string           // <1SMLV / >1SMLV / <5SMLV / >5SMLV
+  // Revisión con Sebastián (2026-11-13): «problemas de acceso al mercado» (texto
+  // libre) pasó a opciones, y en vez de preguntar los ingresos (rangos que se
+  // pisaban entre sí) se pregunta la leche vendida y de qué vive la familia.
+  problemas_mercado?: string
+  nivel_ingresos?: string
+  dificultades_venta?: string[]
+  dificultad_venta_otra?: string
+  leche_vendida_mes_litros?: number | null
+  fuente_ingreso_principal?: string
+  otras_fuentes_ingreso?: string[]
+  otra_fuente_ingreso_cual?: string
 }
 
 // ─── §6A Cultivos ─────────────────────────────────────────────────────────────
@@ -107,6 +118,7 @@ export interface EncuestaGanaderia {
   manejo_praderas: string[]
   infraestructura_ganadera: string[]
   material_postes: string[]
+  inversion_wwf?: string[]         // Cercado / Acueducto ganadero / Banco de proteína / Ninguno (2026-11-13)
   ha_pasto_ultimo_anio: number | null
   origen_nuevos_pastos: string[]
   // Regenerativa

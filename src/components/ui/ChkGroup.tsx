@@ -3,11 +3,15 @@ interface ChkGroupProps {
   val: string[]
   onChange: (v: string[]) => void
   cols?: number
+  /** Opción que excluye a las demás («Ninguno», «Ninguna»). */
+  exclusiva?: string
 }
 
-export function ChkGroup({ opts, val, onChange, cols = 2 }: ChkGroupProps) {
+export function ChkGroup({ opts, val, onChange, cols = 2, exclusiva }: ChkGroupProps) {
   const toggle = (o: string) => {
-    onChange(val.includes(o) ? val.filter(x => x !== o) : [...val, o])
+    if (val.includes(o)) return onChange(val.filter(x => x !== o))
+    if (exclusiva && o === exclusiva) return onChange([o])
+    onChange([...val.filter(x => x !== exclusiva), o])
   }
   return (
     <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))` }}>

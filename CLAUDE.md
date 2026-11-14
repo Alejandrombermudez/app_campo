@@ -135,6 +135,12 @@ camino a `geo.zonas` es justo la clase de bug que ya costó correcciones). Lo qu
   Las capas de apoyo que fallen tampoco tumban la descarga. **Filtro «Lácteos del Hogar»**: la vista trae
   `fuente_informacion` desde `migration_vista_campo_fuente.sql` (en `../Intranet-AE/docs/sql/`, **pendiente de
   correr** al 2026-11-09); sin ella la app pide sin la columna (un 400 en consola, esperado) y el filtro no aparece.
+- **Predios vecinos en el mapa (2026-11-13, pedido de campo):** el módulo SIG dibuja en celeste punteado el límite de
+  finca de todos los demás predios de la copia local (`lib/vecinos.ts`), con su nombre desde zoom 14 y «· LDH» si son de
+  Lácteos del Hogar; la barra del GPS dice «En el predio vecino X» si la persona está dentro de uno. Solo contexto: no se
+  tocan ni entran al encuadre. Botón para ocultarlos (preferencia del celular, `ae-ver-vecinos`). No necesita SQL: sale
+  de `zonas_finca`, que ya baja para los 140 predios (al 2026-11-13, 70 con límite, 60 de ellos de LDH). El límite
+  redibujado en terreno de un vecino no se ve hasta que el SIG lo confirma.
 - «Actualizar desde el SIG» solo bloquea el «cero zonas» si el celular tenía zonas del SIG que perder.
 - Pruebas sin red: `npm run pruebas` (rolldown + stubs de Dexie y Supabase en `scripts/`).
 
@@ -169,6 +175,24 @@ Pedido del usuario. Para cualquier predio, haya o no propuesta del SIG:
   rechazados y lo siguen usando las fotos viejas (`zona_<n>_…`). Las fotos de un sitio caracterizado desde el
   editor SIG usan `ZonaData.foto_clave` (`sitio_<uuid>_…`, `prefijoFotos`).
 - Excel de las preguntas frente a los TR de Corpoamazonia (Áreas de Vida): `docs/Formularios_vs_TR_Corpoamazonia.xlsx`.
+
+## Preguntas revisadas con Sebastián (2026-11-13)
+
+Comentarios de Sebastián al correo sobre las preguntas (numeración del Excel `docs/Formularios_vs_TR_Corpoamazonia.xlsx`).
+Las respuestas son JSON por sección (`seccion_*_data`, `sec_*`): **nada de esto necesitó SQL**, y las llaves viejas
+quedan en los tipos como opcionales para leer lo ya capturado (el Reporte de la intranet muestra lo que venga).
+
+- Evaluación: sin operador celular (8) ni experiencia en restauración (14); «tiempo desde vía pública» → centro
+  urbano más cercano + tiempo (`centro_urbano`, `tiempo_desde_centro_urbano`) (9); «protección individual de
+  plántulas» → «¿Hay que aislar el sitio con cerca…?» (`requiere_aislamiento`) (22); sin «complejidad logística
+  global» (35): la dicen medio de acceso, camino y tiempo.
+- Encuesta: sin altitud (57, sale del modelo de elevación); techo/paredes/piso → `estructura_vivienda` (65-67);
+  «problemas de acceso al mercado» → opciones `dificultades_venta` (90); sin rangos de ingreso, que además se
+  pisaban (91) → `leche_vendida_mes_litros`; nuevas `fuente_ingreso_principal` + `otras_fuentes_ingreso`;
+  Ganadería: `inversion_wwf` (Cercado / Acueducto ganadero / Banco de proteína / Ninguno).
+- Tipo de proyecto del sitio (51, «Pastoreo»): ya estaba resuelto el 2026-10-27 (Ley del Árbol / Mercado voluntario
+  de carbono / Ganadería sostenible).
+- `ChkGroup` acepta `exclusiva` («Ninguno»/«Ninguna» desmarca las demás).
 
 ## Predios de práctica (capacitación) — `lib/practica.ts`
 

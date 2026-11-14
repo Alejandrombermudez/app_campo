@@ -91,16 +91,6 @@ export function Step05({ zona, localEvaluacionId, fotoPrefijo, data, onChange }:
         />
       </Field>
 
-      {/* ── 6. Complejidad logística global ───────────────────────────────── */}
-      <Field label="Complejidad logística global del acceso">
-        <RadioGrp
-          opts={['Baja', 'Media', 'Alta', 'Muy alta']}
-          val={data.complejidad_acceso ?? ''}
-          onChange={v => set('complejidad_acceso', v)}
-          cols={4}
-        />
-      </Field>
-
       {/* ── 7. Descripción de la ruta ─────────────────────────────────────── */}
       <Field label="Descripción de la ruta de acceso" hint="Indicaciones detalladas para llegar a la zona, incluyendo combinación de medios si aplica…">
         <textarea

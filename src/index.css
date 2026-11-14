@@ -394,3 +394,12 @@
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .vidrio { background-color: #fffdf9; }
 }
+
+/* Nombre de los predios vecinos sobre el satelital (módulo SIG). Solo de cerca:
+   con poco zoom el mapa pone .vecinos-lejos y se esconden. */
+.leaflet-tooltip.etiqueta-vecino {
+  background: rgb(8 47 73 / 0.55); color: #ecfeff; border: none; box-shadow: none;
+  padding: 1px 6px; border-radius: 8px; font-size: 11px; font-weight: 600; white-space: nowrap;
+}
+.leaflet-tooltip.etiqueta-vecino::before { display: none; }
+.vecinos-lejos .leaflet-tooltip.etiqueta-vecino { display: none; }

@@ -55,15 +55,14 @@ export function Step01({ data, onChange, evaluador }: Props) {
         <YesNo val={data.senal_celular ?? null} onChange={v => set('senal_celular', v)} />
       </Field>
 
-      {data.senal_celular && (
-        <Field label="Operador celular">
-          <input type="text" placeholder="Claro / Movistar / Tigo / WOM…" value={data.operador_celular ?? ''} onChange={e => set('operador_celular', e.target.value)} />
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Centro urbano más cercano">
+          <input type="text" placeholder="Ej: Morelia" value={data.centro_urbano ?? ''} onChange={e => set('centro_urbano', e.target.value)} />
         </Field>
-      )}
-
-      <Field label="Tiempo desde vía pública hasta el predio">
-        <input type="text" placeholder="Ej: 30 min en moto" value={data.tiempo_desde_via ?? ''} onChange={e => set('tiempo_desde_via', e.target.value)} />
-      </Field>
+        <Field label="Tiempo desde ahí hasta el predio">
+          <input type="text" placeholder="Ej: 1 h en moto" value={data.tiempo_desde_centro_urbano ?? ''} onChange={e => set('tiempo_desde_centro_urbano', e.target.value)} />
+        </Field>
+      </div>
     </div>
   )
 }

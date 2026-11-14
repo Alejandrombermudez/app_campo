@@ -106,12 +106,12 @@ export function Step03({ zona, data, onChange }: Props) {
         />
       </div>
 
-      {/* 7. Requiere protección individual */}
-      <Field label="¿Requiere protección individual de plántulas?">
+      {/* 7. Aislamiento (antes «protección individual de plántulas», que no se entendía) */}
+      <Field label="¿Hay que aislar el sitio con cerca para protegerlo del ganado?">
         <RadioGrp
-          opts={['Sí', 'No', 'Parcialmente']}
-          val={data.requiere_proteccion ?? ''}
-          onChange={v => set('requiere_proteccion', v)}
+          opts={['Sí, todo el sitio', 'Sí, una parte', 'No hace falta']}
+          val={data.requiere_aislamiento ?? ''}
+          onChange={v => set('requiere_aislamiento', v)}
           cols={3}
         />
       </Field>

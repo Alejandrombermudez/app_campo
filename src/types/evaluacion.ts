@@ -14,8 +14,13 @@ export interface SeccionIdentificacion {
   evaluador_2: string
   codigo_predio: string
   senal_celular: boolean
-  operador_celular: string
-  tiempo_desde_via: string
+  // Revisión de las preguntas con Sebastián (2026-11-13): el operador ya no se
+  // pregunta y «tiempo desde vía pública» pasó a «desde el centro urbano más
+  // cercano». Las dos llaves viejas quedan para leer las evaluaciones de antes.
+  operador_celular?: string
+  tiempo_desde_via?: string
+  centro_urbano?: string                // Ej: Morelia
+  tiempo_desde_centro_urbano?: string   // Ej: 1 h en moto
 }
 
 // ─── §2 Cartografía Social ────────────────────────────────────────────────────
@@ -24,7 +29,7 @@ export interface SeccionCartografia {
   ajustes_poligono: string
   observaciones_sociales: string
   mano_obra_disponible: boolean
-  experiencia_restauracion: boolean
+  experiencia_restauracion?: boolean    // ya no se pregunta (2026-11-13)
 }
 
 // ─── §3 Cobertura Vegetal (por zona) ─────────────────────────────────────────
@@ -36,7 +41,8 @@ export interface SeccionCobertura {
   regeneracion_natural: string      // Escasa / Moderada / Abundante
   defaunacion: string               // Leve / Moderada / Severa
   presion_fauna_ganado: string
-  requiere_proteccion: string       // Sí / No / Parcial
+  requiere_proteccion?: string      // vieja y ambigua; ya no se pregunta (2026-11-13)
+  requiere_aislamiento?: string     // Sí, todo el sitio / Sí, una parte / No hace falta
 }
 
 // ─── §4 Suelo y Topografía (por zona) ────────────────────────────────────────
@@ -63,7 +69,7 @@ export interface SeccionLogistica {
   tiempo_predio_zona: string
   condicion_camino: string          // Buena / Regular / Difícil / Muy difícil
   lugar_deposito_material: string
-  complejidad_acceso: string        // Baja / Media / Alta / Muy alta
+  complejidad_acceso?: string       // ya no se pregunta (2026-11-13): la dicen medio, camino y tiempo
   descripcion_ruta: string
   foto_via_id: number | null
 }

@@ -7,6 +7,7 @@ import { db } from '../src/db/schema'
 import { respuestas, tablas } from '../src/lib/supabase'
 import { evaluarLectura, lecturaVieja } from '../src/lib/trazo'
 import { refreshPrediosHabilitados, getEstadoDescarga } from '../src/lib/core'
+import { prediosVecinos, vecinoEn } from '../src/lib/vecinos'
 
 let fallas = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? 'OK   ' : 'FALLA'} ${m}`); if (!c) fallas++ }
@@ -23,6 +24,18 @@ ok(evaluarLectura({ ...L0, t: 0 }, lect(0.001, 5, 2000)) === 'salto', 'salto de 
 ok(evaluarLectura({ ...L0, t: null }, lect(0.001, 5, 2000)) === null, 'al reanudar no se mide la velocidad')
 ok(evaluarLectura({ ...L0, t: 0 }, lect(0.00006, 18, 5000)) === 'cerca', 'el paso mínimo crece con la imprecisión (7 m con ±18 m)')
 ok(lecturaVieja(lect(0, 5, 0), 20_000) && !lecturaVieja(lect(0, 5, 0), 3000), 'lectura de hace 20 s es vieja')
+
+// ── 1b. Predios vecinos (lib/vecinos.ts) ──
+const cuadro = (lon: number, lat: number, d = 0.001) => JSON.stringify({ type: 'Polygon', coordinates: [[[lon, lat], [lon + d, lat], [lon + d, lat + d], [lon, lat + d], [lon, lat]]] })
+const ph = (id: string, nombre: string, fuente: string | null, geo: string[]) => ({
+  predio_id: id, nombre_predio: nombre, nombre_propietario: 'P', fuente_informacion: fuente,
+  zonas_finca: geo.map(g => ({ id: 'f' + id, nombre: null, tipo: 'finca', estado: 'potencial', area_ha: 1, perimetro_m: 1, propiedades: null, geojson: g })),
+}) as any
+const todos = [ph('a', 'Propio', null, [cuadro(-75.6, 1.6)]), ph('b', 'Vecino LDH', 'lacteos_del_hogar', [cuadro(-75.599, 1.6)]),
+  ph('c', 'Sin límite', null, []), ph('d', 'Roto', null, ['{malo'])]
+const vec = prediosVecinos(todos, 'a')
+ok(vec.length === 1 && vec[0].predio_id === 'b' && vec[0].ldh, 'vecinos: sin el propio, sin los que no tienen límite; marca LDH')
+ok(vecinoEn(1.6005, -75.5985, vec)?.nombre === 'Vecino LDH' && vecinoEn(1.6005, -75.5995, vec) === null, 'dice en qué predio vecino se está parado')
 
 // ── 2. Descarga de la lista ──
 // Cada descarga «un rato después»: una reciente (< 60 s) se reutilizaría sin bajar.

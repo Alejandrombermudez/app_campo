@@ -6,12 +6,13 @@ import 'leaflet/dist/leaflet.css'
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css'
 import {
   ArrowLeft, Crosshair, Plus, Check, X, Pencil, Trash2, Undo2,
-  Satellite, AlertTriangle, RefreshCw, MapPin, Footprints, Fence, Sprout, Layers, ClipboardList, Pause, Play,
+  Satellite, AlertTriangle, RefreshCw, MapPin, Footprints, Fence, Sprout, Layers, ClipboardList, Pause, Play, LandPlot,
 } from 'lucide-react'
 import { db } from '../../db/schema'
 import type { FamiliaRecord } from '../../types/familia'
 import type { CapaApoyo } from '../../types/core'
-import { getPredioHabilitadoCache } from '../../lib/core'
+import { getPredioHabilitadoCache, getPrediosHabilitadosCache } from '../../lib/core'
+import { prediosVecinos, vecinoEn, type PredioVecino } from '../../lib/vecinos'
 import type { RevisionRecord, CambiosRevision, TipoRevision, DecisionApoyoRecord } from '../../types/revision'
 import { newRevision, fusionarRevision, newDecisionApoyo } from '../../types/revision'
 import type { EvaluacionRecord, EstadoCaracterizacion } from '../../types/evaluacion'
@@ -37,6 +38,9 @@ const ESTILO_FANTASMA: L.PathOptions = {
 }
 // Mientras se trabaja el límite, los sitios se ven pero no estorban
 const ESTILO_SITIO_TENUE: L.PathOptions = { color: '#f59e0b', weight: 1.5, fillOpacity: 0.08, dashArray: '2 4', interactive: false }
+// Límite de los predios vecinos: celeste para no confundirse con el blanco del
+// predio abierto ni con el ámbar de los sitios.
+const ESTILO_VECINO: L.PathOptions = { color: '#67e8f9', weight: 1.5, dashArray: '5 5', fill: false, interactive: false }
 
 // Capas de apoyo (áreas elegibles…): debajo de todo. Desde el 2026-10-21 se
 // tocan: un área se usa como sitio (tal cual o ajustada) o se rechaza con motivo.
@@ -136,6 +140,14 @@ function leerAuto(): boolean {
   try { return localStorage.getItem(CLAVE_AUTO) !== 'no' } catch { return true }
 }
 
+// Ver los predios vecinos: también preferencia del celular (por defecto, sí).
+const CLAVE_VECINOS = 'ae-ver-vecinos'
+function leerVerVecinos(): boolean {
+  try { return localStorage.getItem(CLAVE_VECINOS) !== 'no' } catch { return true }
+}
+// Con menos zoom que esto los nombres de los vecinos se tapan unos a otros.
+const ZOOM_NOMBRES_VECINOS = 14
+
 // ─── Página ───────────────────────────────────────────────────────────────────
 export function SigPage() {
   const { id } = useParams<{ id: string }>()   // familia local_id
@@ -162,6 +174,8 @@ export function SigPage() {
   const [descarte, setDescarte] = useState<MotivoDescarte>(null)               // por qué no entró la última lectura
   const [capasApoyo, setCapasApoyo] = useState<CapaApoyo[]>([])
   const [verApoyo, setVerApoyo] = useState(true)
+  const [vecinos, setVecinos] = useState<PredioVecino[]>([])                 // los demás predios con límite
+  const [verVecinos, setVerVecinos] = useState(leerVerVecinos)
   const [decisiones, setDecisiones] = useState<DecisionApoyoRecord[]>([])   // áreas de apoyo rechazadas aquí
   const [evaluacion, setEvaluacion] = useState<EvaluacionRecord | null>(null)
   const [selApoyo, setSelApoyo] = useState<string | null>(null)              // área de apoyo seleccionada
@@ -174,6 +188,7 @@ export function SigPage() {
   const zonasLayerRef = useRef<L.LayerGroup | null>(null)
   const fincaLayerRef = useRef<L.LayerGroup | null>(null)
   const apoyoLayerRef = useRef<L.LayerGroup | null>(null)
+  const vecinosLayerRef = useRef<L.LayerGroup | null>(null)
   const trazoLayerRef = useRef<L.LayerGroup | null>(null)
   const capasPorZonaRef = useRef<Map<number, L.Polygon>>(new Map())
   const capasPorLimiteRef = useRef<Map<number, L.Polygon>>(new Map())
@@ -217,6 +232,17 @@ export function SigPage() {
   }, [id])
 
   useEffect(() => { cargar() }, [cargar])
+
+  // Predios vecinos: de la copia local, una vez por predio (no en cada guardado).
+  const predioCoreId = familia?.predio_core_id
+  useEffect(() => {
+    if (!loaded) return
+    let vivo = true
+    getPrediosHabilitadosCache()
+      .then(todos => { if (vivo) setVecinos(prediosVecinos(todos, predioCoreId)) })
+      .catch(() => { /* sin copia: sin vecinos */ })
+    return () => { vivo = false }
+  }, [loaded, predioCoreId])
 
   const zonas = useMemo(
     () => familia ? zonasVigentes(familia, revisiones) : [],
@@ -286,6 +312,11 @@ export function SigPage() {
     if (!gps) return null
     return posicionRespectoZonas(gps.lat, gps.lon, zonas.filter(z => !z.descartada))
   }, [gps, zonas])
+  // En qué predio vecino está parada la persona (si se salió del suyo).
+  const vecinoActual = useMemo(
+    () => (gps && verVecinos ? vecinoEn(gps.lat, gps.lon, vecinos) : null),
+    [gps, vecinos, verVecinos],
+  )
 
   // ─── Inicializar mapa (una sola vez) ────────────────────────────────────────
   useEffect(() => {
@@ -312,7 +343,13 @@ export function SigPage() {
     const alCambiarTamano = new ResizeObserver(() => map.invalidateSize())
     alCambiarTamano.observe(mapDivRef.current)
 
-    apoyoLayerRef.current = L.layerGroup().addTo(map)   // debajo de todo
+    vecinosLayerRef.current = L.layerGroup().addTo(map) // debajo de todo
+    apoyoLayerRef.current = L.layerGroup().addTo(map)
+    // Los nombres de los vecinos solo de cerca (CSS: .vecinos-lejos).
+    const nombresSegunZoom = () =>
+      mapDivRef.current?.classList.toggle('vecinos-lejos', map.getZoom() < ZOOM_NOMBRES_VECINOS)
+    map.on('zoomend', nombresSegunZoom)
+    nombresSegunZoom()
     fincaLayerRef.current = L.layerGroup().addTo(map)
     zonasLayerRef.current = L.layerGroup().addTo(map)
     trazoLayerRef.current = L.layerGroup().addTo(map)
@@ -345,6 +382,29 @@ export function SigPage() {
     // creaba otra vez tras cada acción — volvía al zoom 15 y perdía el GPS.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [familia?.local_id])
+
+  // ─── Predios vecinos: solo contexto, no se tocan ni entran al encuadre ──────
+  useEffect(() => {
+    const grupo = vecinosLayerRef.current
+    if (!grupo) return
+    grupo.clearLayers()
+    if (!verVecinos) return
+    for (const v of vecinos) {
+      for (const f of v.limites) {
+        const gj = L.geoJSON(f, { style: ESTILO_VECINO, interactive: false })
+        gj.bindTooltip(v.ldh ? `${v.nombre} · LDH` : v.nombre,
+          { permanent: true, direction: 'center', className: 'etiqueta-vecino', interactive: false })
+        gj.addTo(grupo)
+      }
+    }
+  }, [vecinos, verVecinos, familia?.local_id])
+
+  function cambiarVerVecinos() {
+    setVerVecinos(v => {
+      try { localStorage.setItem(CLAVE_VECINOS, v ? 'no' : 'si') } catch { /* sin almacenamiento */ }
+      return !v
+    })
+  }
 
   // ─── Capas de apoyo (va antes que el resto para entrar en el primer encuadre) ─
   useEffect(() => {
@@ -948,6 +1008,14 @@ export function SigPage() {
                   <Layers size={22} />
                 </button>
               )}
+              {vecinos.length > 0 && (
+                <button onClick={cambiarVerVecinos} aria-pressed={verVecinos}
+                  className={`boton-mapa ${verVecinos ? 'boton-pizarra' : 'vidrio text-bosque'}`}
+                  aria-label={verVecinos ? 'Ocultar los predios vecinos' : 'Mostrar los predios vecinos'}
+                  title={verVecinos ? 'Ocultar los predios vecinos' : 'Mostrar los predios vecinos'}>
+                  <LandPlot size={22} />
+                </button>
+              )}
             </>
           )}
         </div>
@@ -974,6 +1042,13 @@ export function SigPage() {
               <span className="flex items-center gap-1.5 text-gray-700">
                 <MapPin size={15} className="text-bosque" /> GPS activo
                 <span className={precisionMala ? 'text-amber-800 font-semibold' : 'text-gray-500'}>±{Math.round(gps.accuracy)} m</span>
+              </span>
+            )}
+            {vecinoActual && (
+              <span className="mt-1 flex items-center gap-1.5 text-blue-900">
+                <LandPlot size={15} className="shrink-0" />
+                <span>En el predio vecino <strong>{vecinoActual.nombre}</strong>
+                  {vecinoActual.ldh && <span className="text-gray-600"> · Lácteos del Hogar</span>}</span>
               </span>
             )}
           </div>

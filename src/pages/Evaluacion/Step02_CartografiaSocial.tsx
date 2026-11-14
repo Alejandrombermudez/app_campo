@@ -55,10 +55,6 @@ export function Step02({ data, onChange }: Props) {
       <Field label="¿Hay mano de obra disponible en la zona?">
         <YesNo val={data.mano_obra_disponible ?? null} onChange={v => set('mano_obra_disponible', v)} />
       </Field>
-
-      <Field label="¿El propietario tiene experiencia en restauración?">
-        <YesNo val={data.experiencia_restauracion ?? null} onChange={v => set('experiencia_restauracion', v)} />
-      </Field>
     </div>
   )
 }

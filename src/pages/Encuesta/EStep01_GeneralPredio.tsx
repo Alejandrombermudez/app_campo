@@ -59,15 +59,10 @@ export function EStep01({ data, onChange }: Props) {
         />
       </Section>
 
-      <Section title="Altitud y antigüedad">
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Altitud (msnm)">
-            <input type="number" value={data.altitud_msnm ?? ''} onChange={e => s('altitud_msnm', e.target.value ? +e.target.value : null)} />
-          </Field>
-          <Field label="Año adquisición">
-            <input type="number" placeholder="2010" value={data.anio_adquisicion ?? ''} onChange={e => s('anio_adquisicion', e.target.value ? +e.target.value : null)} />
-          </Field>
-        </div>
+      <Section title="Antigüedad y distancia">
+        <Field label="Año de adquisición">
+          <input type="number" placeholder="2010" value={data.anio_adquisicion ?? ''} onChange={e => s('anio_adquisicion', e.target.value ? +e.target.value : null)} />
+        </Field>
         <Field label="Distancia a cabecera municipal (km)">
           <input type="number" step="0.1" value={data.distancia_cabecera_km ?? ''} onChange={e => s('distancia_cabecera_km', e.target.value ? +e.target.value : null)} />
         </Field>
