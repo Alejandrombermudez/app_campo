@@ -133,8 +133,9 @@ camino a `geo.zonas` es justo la clase de bug que ya costó correcciones). Lo qu
   queda con su copia anterior (nunca con zonas vacías) o no entra, y `getEstadoDescarga()` lo dice: la lista muestra
   «N predio(s) de M» y un aviso con «Reintentar». Antes un solo predio fallido dejaba toda la copia vieja en silencio.
   Las capas de apoyo que fallen tampoco tumban la descarga. **Filtro «Lácteos del Hogar»**: la vista trae
-  `fuente_informacion` desde `migration_vista_campo_fuente.sql` (en `../Intranet-AE/docs/sql/`, **pendiente de
-  correr** al 2026-11-09); sin ella la app pide sin la columna (un 400 en consola, esperado) y el filtro no aparece.
+  `fuente_informacion` desde `migration_vista_campo_fuente.sql` (en `../Intranet-AE/docs/sql/`, corrida y
+  verificada por REST el 2026-11-13: 65 de 140 son de LDH); una base sin ella hace que la app pida sin la columna y el
+  filtro no aparezca.
 - **Predios vecinos en el mapa (2026-11-13, pedido de campo):** el módulo SIG dibuja en celeste punteado el límite de
   finca de todos los demás predios de la copia local (`lib/vecinos.ts`), con su nombre desde zoom 14 y «· LDH» si son de
   Lácteos del Hogar; la barra del GPS dice «En el predio vecino X» si la persona está dentro de uno. Solo contexto: no se
